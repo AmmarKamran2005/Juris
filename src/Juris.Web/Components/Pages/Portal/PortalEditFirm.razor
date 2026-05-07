@@ -1,0 +1,150 @@
+@page "/portal/firm"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireFirmHR")]
+@rendermode InteractiveServer
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthState
+@inject Microsoft.AspNetCore.Identity.UserManager<Juris.Infrastructure.Identity.ApplicationUser> UserManager
+@inject Juris.Application.Common.IApplicationDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Edit Firm · Juris Portal</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/portal" class="j-plain">← Portal</a></div>
+        <h1 style="font-size: clamp(28px, 4vw, 44px);">Edit firm profile</h1>
+    </div>
+</section>
+
+@if (_firm is null)
+{
+    <section class="j-section">
+        <div class="j-container">
+            <div class="j-empty">No firm linked to this account. Contact partners@juris.local.</div>
+        </div>
+    </section>
+}
+else
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container" style="max-width: 820px;">
+            @if (_message is not null)
+            {
+                <div class="j-alert j-alert-success">@_message</div>
+            }
+
+            <EditForm Model="_firm" OnValidSubmit="Save" FormName="edit-firm">
+                <h3 class="j-mb-4">Identity</h3>
+                <div class="j-form-row">
+                    <label>Firm name</label>
+                    <InputText class="j-input" @bind-Value="_firm.Name" />
+                </div>
+                <div class="j-form-row">
+                    <label>City</label>
+                    <InputText class="j-input" @bind-Value="_firm.City" />
+                </div>
+                <div class="j-form-row">
+                    <label>Website URL</label>
+                    <InputText class="j-input" @bind-Value="_firm.WebsiteUrl" />
+                </div>
+                <div class="j-form-row">
+                    <label>Apply URL</label>
+                    <InputText class="j-input" @bind-Value="_firm.ApplyUrl" />
+                </div>
+                <div class="j-form-row">
+                    <label>Early Careers URL</label>
+                    <InputText class="j-input" @bind-Value="_firm.EarlyCareersUrl" />
+                </div>
+
+                <h3 class="j-mt-8 j-mb-4">Hard Data</h3>
+                <div class="j-form-row">
+                    <label>Articling salary (CAD)</label>
+                    <InputNumber class="j-input" @bind-Value="_firm.ArticlingSalary" />
+                </div>
+                <div class="j-form-row">
+                    <label>1st-year associate salary (CAD)</label>
+                    <InputNumber class="j-input" @bind-Value="_firm.FirstYearAssociateSalary" />
+                </div>
+                <div class="j-form-row">
+                    <label>Articling class size</label>
+                    <InputNumber class="j-input" @bind-Value="_firm.ClassSize" />
+                </div>
+                <div class="j-form-row">
+                    <label>Hireback rate (%)</label>
+                    <InputNumber class="j-input" @bind-Value="_firm.RetentionRate" step="0.01" />
+                </div>
+                <div class="j-form-row">
+                    <label>Billable target (hours)</label>
+                    <InputNumber class="j-input" @bind-Value="_firm.BillableTarget" />
+                </div>
+
+                <h3 class="j-mt-8 j-mb-4">The Vibe</h3>
+                <div class="j-form-row">
+                    <label>Vibe summary (1-2 sentences)</label>
+                    <InputTextArea class="j-textarea" @bind-Value="_firm.VibeSummary" />
+                </div>
+                <div class="j-form-row">
+                    <label>AI policy</label>
+                    <InputTextArea class="j-textarea" @bind-Value="_firm.AiPolicy" />
+                </div>
+                <div class="j-form-row">
+                    <label>Work-life balance</label>
+                    <InputTextArea class="j-textarea" @bind-Value="_firm.WorkLifeBalance" />
+                </div>
+                <div class="j-form-row">
+                    <label>Office culture</label>
+                    <InputTextArea class="j-textarea" @bind-Value="_firm.OfficeCulture" />
+                </div>
+                <div class="j-form-row">
+                    <label>Compensation philosophy</label>
+                    <InputTextArea class="j-textarea" @bind-Value="_firm.CompensationPhilosophy" />
+                </div>
+
+                <div class="j-mt-8" style="display: flex; gap: 12px;">
+                    <button type="submit" class="j-button j-primary" disabled="@_busy">@(_busy ? "Saving…" : "Save changes")</button>
+                    <a href="/firms/@_firm.Slug" target="_blank" rel="noopener" class="j-button j-plain">Preview public profile ↗</a>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+
+    <section class="j-section j-grey">
+        <div class="j-container" style="max-width: 1100px;">
+            <h2>Profile content</h2>
+            <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 14px;">
+                Manage your practice areas, perks, deadlines, and editorial reviews.
+            </p>
+            <FirmContentEditor FirmId="@_firm.Id" />
+        </div>
+    </section>
+}
+
+@code {
+    private Juris.Domain.Entities.Firm? _firm;
+    private string? _message;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        if (auth.User?.Identity?.IsAuthenticated != true) return;
+        var user = await UserManager.GetUserAsync(auth.User);
+        if (user?.FirmId is null) return;
+        _firm = await Db.Firms.FirstOrDefaultAsync(f => f.Id == user.FirmId);
+    }
+
+    private async Task Save()
+    {
+        if (_firm is null) return;
+        _busy = true;
+        try
+        {
+            _firm.UpdatedAtUtc = DateTime.UtcNow;
+            await Db.SaveChangesAsync();
+            _message = "Saved. Public profile updated.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,70 @@
+@page "/admin/firms"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireAdmin")]
+@inject Juris.Application.Common.IApplicationDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Manage Firms · Admin · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/admin" class="j-plain">← Admin</a></div>
+        <h1 style="font-size: clamp(28px, 4vw, 44px);">Manage Firms</h1>
+        <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 14px;">@_firms.Count firms in the directory.</p>
+    </div>
+</section>
+
+<section class="j-section" style="padding-top: 24px;">
+    <div class="j-container">
+        <div class="j-flex-between j-mb-6">
+            <span class="j-text-grey" style="font-family: var(--juris-sans); font-size: 13px;">Most recently added first.</span>
+            <a href="/admin/firms/new" class="j-button j-primary">+ New firm</a>
+        </div>
+        <table class="j-table">
+            <thead>
+                <tr>
+                    <th>Firm</th>
+                    <th>City</th>
+                    <th>Peer Group</th>
+                    <th class="j-table-numeric">Articling</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in _firms)
+                {
+                    <tr>
+                        <td><a href="/firms/@f.Slug" target="_blank" class="j-plain"><strong>@f.Name</strong></a></td>
+                        <td>@f.City</td>
+                        <td>@f.PeerGroup</td>
+                        <td class="j-table-numeric">@(f.ArticlingSalary.HasValue ? "$" + f.ArticlingSalary.Value.ToString("N0") : "—")</td>
+                        <td>
+                            @if (f.IsFeaturedPartner)
+                            {
+                                <span class="j-tag j-featured">Featured</span>
+                            }
+                            @if (f.IsVerified)
+                            {
+                                <span class="j-tag j-verified">Verified</span>
+                            }
+                            @if (!f.IsPublished)
+                            {
+                                <span class="j-tag">Draft</span>
+                            }
+                        </td>
+                        <td><a href="/admin/firms/@f.Id" class="j-button j-small j-plain">Edit</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@code {
+    private List<Juris.Domain.Entities.Firm> _firms = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _firms = await Db.Firms.OrderBy(f => f.Name).AsNoTracking().ToListAsync();
+    }
+}

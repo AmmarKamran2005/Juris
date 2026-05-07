@@ -1,0 +1,131 @@
+@page "/admin/import"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireAdmin")]
+@rendermode InteractiveServer
+@inject Juris.Application.Import.ICsvImportService Importer
+@using Microsoft.AspNetCore.Components.Forms
+
+<PageTitle>CSV Import · Admin · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/admin" class="j-plain">← Admin</a></div>
+        <h1 style="font-size: clamp(28px, 4vw, 44px);">CSV Bulk Import</h1>
+        <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 14px; max-width: 60ch;">
+            Upload firms, schools, or articles in bulk. Rows are matched on <code>Slug</code> (auto-derived from
+            <code>Name</code>/<code>Title</code> if missing). Existing rows can be overwritten or skipped.
+        </p>
+    </div>
+</section>
+
+<section class="j-section" style="padding-top: 24px;">
+    <div class="j-container j-narrow">
+        @if (_result is not null)
+        {
+            <div class="j-alert j-alert-success">
+                <strong>Imported.</strong>
+                Created <strong>@_result.Created</strong> ·
+                Updated <strong>@_result.Updated</strong> ·
+                Skipped <strong>@_result.Skipped</strong> ·
+                Errors <strong>@_result.Errors</strong>
+                @if (_result.ErrorMessages.Count > 0)
+                {
+                    <ul class="j-mt-2">
+                        @foreach (var err in _result.ErrorMessages.Take(15))
+                        {
+                            <li>@err</li>
+                        }
+                        @if (_result.ErrorMessages.Count > 15)
+                        {
+                            <li>… and @(_result.ErrorMessages.Count - 15) more</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+
+        <div class="j-form-row">
+            <label>Entity type</label>
+            <select class="j-select" @bind="_entity">
+                <option value="firms">Firms</option>
+                <option value="schools">Schools</option>
+                <option value="articles">Articles</option>
+            </select>
+        </div>
+
+        <div class="j-form-row">
+            <label><input type="checkbox" @bind="_overwrite" style="margin-right: 8px;" /> Overwrite existing rows (match on Slug)</label>
+        </div>
+
+        <div class="j-form-row">
+            <label>CSV file (UTF-8)</label>
+            <InputFile OnChange="OnFileSelected" accept=".csv" class="j-input" />
+            @if (_file is not null)
+            {
+                <span class="j-text-grey j-mt-2" style="font-family: var(--juris-sans); font-size: 13px;">
+                    Selected: <strong>@_file.Name</strong> (@(_file.Size / 1024) KB)
+                </span>
+            }
+        </div>
+
+        <div class="j-mt-6" style="display: flex; gap: 12px;">
+            <button class="j-button j-primary" @onclick="Run" disabled="@(_busy || _file is null)">
+                @(_busy ? "Importing…" : "Run import")
+            </button>
+            <a href="/admin/import/template?entity=@_entity" class="j-button j-plain">Download CSV template ↓</a>
+        </div>
+
+        <h2 class="j-mt-8 j-mb-4">CSV format quick reference</h2>
+        <div class="j-prose j-mb-8">
+            <p><strong>Firms</strong> — header columns: <code>Slug, Name, LegalName, City, Province, LogoUrl, WebsiteUrl, ApplyUrl, EarlyCareersUrl, ArticlingSalary, FirstYearAssociateSalary, ClassSize, RetentionRate, BillableTarget, VibeSummary, AiPolicy, WorkLifeBalance, OfficeCulture, PeerGroup, PracticeAreas, IsVerified, IsFeaturedPartner, IsPublished, OciDeadlineUtc, ArticlingDeadlineUtc</code></p>
+            <p><code>PracticeAreas</code> is pipe-delimited, e.g. <code>M&amp;A|Tax|Litigation</code>. <code>PeerGroup</code> is one of: <code>SevenSisters</code>, <code>NationalFullService</code>, <code>Boutique</code>, <code>MidLaw</code>, <code>USFirmCanadianOffice</code>, <code>Inhouse</code>, <code>Government</code>.</p>
+            <p><strong>Schools</strong> — <code>Slug, Name, ShortName, City, Province, LogoUrl, WebsiteUrl, AnnualTuitionCad, ClassSize, MedianLsat, MedianGpa, EmploymentRateAt9MonthsPct, SevenSistersHireRatePct, BarPassRatePct, AboutHtml, MootingNotes, ClinicNotes, PreLawPathwayNotes, CareerOutcomesNotes, IsPublished</code></p>
+            <p><strong>Articles</strong> — <code>Slug, Title, Subtitle, Excerpt, BodyHtml, FeaturedImageUrl, Category, AuthorName, PublishedAtUtc, ReadTimeMinutes, IsPublished, IsFeatured</code>. Category: <code>Careers</code>, <code>MarketNews</code>, <code>StudentLife</code>, <code>TheVault</code>.</p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string _entity = "firms";
+    private bool _overwrite = true;
+    private bool _busy;
+    private IBrowserFile? _file;
+    private Juris.Application.Import.ImportResult? _result;
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _file = e.File;
+        _result = null;
+    }
+
+    private async Task Run()
+    {
+        if (_file is null) return;
+        _busy = true;
+        _result = null;
+        try
+        {
+            // 8 MB cap — should comfortably handle 200+ rows.
+            await using var stream = _file.OpenReadStream(8 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Position = 0;
+
+            _result = _entity switch
+            {
+                "firms" => await Importer.ImportFirmsAsync(ms, _overwrite),
+                "schools" => await Importer.ImportSchoolsAsync(ms, _overwrite),
+                "articles" => await Importer.ImportArticlesAsync(ms, _overwrite),
+                _ => null,
+            };
+        }
+        catch (Exception ex)
+        {
+            _result = new Juris.Application.Import.ImportResult
+            {
+                Errors = 1,
+                ErrorMessages = new() { ex.Message }
+            };
+        }
+        finally { _busy = false; }
+    }
+}

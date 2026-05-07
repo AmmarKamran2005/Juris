@@ -1,0 +1,195 @@
+@page "/firms"
+@inject IFirmService FirmService
+@inject NavigationManager Nav
+
+<PageTitle>Firm Directory · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 56px 0 48px;">
+    <div class="j-container">
+        <div class="j-eyebrow">The Firm Directory</div>
+        <h1 style="font-size: clamp(34px, 5vw, 60px);">Every Ontario firm, ranked by what matters.</h1>
+        <p class="j-lede">Filter by city, practice area, articling salary, or verification status. Hard data on the left; "Vibe" on every profile.</p>
+    </div>
+</section>
+
+<div class="j-page-grid">
+    <aside class="j-filter-sidebar">
+        <form method="get" action="/firms">
+            <h4>Search</h4>
+            <input type="text" name="q" value="@_q" placeholder="Firm or keyword…" />
+
+            <h4>City</h4>
+            <select name="city">
+                <option value="">All cities</option>
+                @foreach (var c in _cities)
+                {
+                    <option value="@c" selected="@(_city == c)">@c</option>
+                }
+            </select>
+
+            <h4>Practice Area</h4>
+            <select name="practice">
+                <option value="">All practice areas</option>
+                @foreach (var p in _practiceAreas)
+                {
+                    <option value="@p.Slug" selected="@(_practice == p.Slug)">@p.Name</option>
+                }
+            </select>
+
+            <h4>Articling Salary (CAD)</h4>
+            <div class="j-range-row">
+                <input type="number" name="minSalary" value="@(_minSalary?.ToString() ?? "")" placeholder="Min" min="0" step="5000" />
+                <input type="number" name="maxSalary" value="@(_maxSalary?.ToString() ?? "")" placeholder="Max" min="0" step="5000" />
+            </div>
+
+            <h4>Peer Group</h4>
+            <select name="peer">
+                <option value="">All peer groups</option>
+                @foreach (var g in Enum.GetValues<PeerGroup>())
+                {
+                    <option value="@g" selected="@(_peer == g)">@PeerLabel(g)</option>
+                }
+            </select>
+
+            <h4>Status</h4>
+            <label><input type="checkbox" name="verified" value="true" checked="@_verifiedOnly" /> Verified firms only</label>
+
+            <h4>Sort</h4>
+            <select name="sort">
+                <option value="@FirmSort.NameAsc" selected="@(_sort == FirmSort.NameAsc)">Name (A–Z)</option>
+                <option value="@FirmSort.SalaryDesc" selected="@(_sort == FirmSort.SalaryDesc)">Salary (high–low)</option>
+                <option value="@FirmSort.SalaryAsc" selected="@(_sort == FirmSort.SalaryAsc)">Salary (low–high)</option>
+                <option value="@FirmSort.RetentionDesc" selected="@(_sort == FirmSort.RetentionDesc)">Retention (high–low)</option>
+                <option value="@FirmSort.RecentlyAdded" selected="@(_sort == FirmSort.RecentlyAdded)">Recently added</option>
+            </select>
+
+            <div style="margin-top: 24px; display: flex; gap: 8px; flex-direction: column;">
+                <button type="submit" class="j-button j-primary">Apply Filters</button>
+                <a href="/firms" class="j-button j-plain" style="text-align:center;">Reset</a>
+            </div>
+        </form>
+    </aside>
+
+    <div>
+        <div style="padding: 24px 32px; border-bottom: 1px solid var(--juris-fg);" class="j-flex-between">
+            <span class="j-uppercase j-text-grey" style="font-family: var(--juris-sans); font-size: 12px; font-weight: 600;">
+                Showing <strong style="color:var(--juris-fg);">@_results.Items.Count</strong> of <strong style="color:var(--juris-fg);">@_results.TotalCount</strong> firms
+            </span>
+            @if (HasAnyFilter())
+            {
+                <a href="/firms" class="j-button j-small j-plain">Clear filters</a>
+            }
+        </div>
+
+        @if (_results.Items.Count == 0)
+        {
+            <div class="j-empty" style="margin: 40px;">
+                No firms match these filters. <a href="/firms" class="j-plain">Clear filters →</a>
+            </div>
+        }
+        else
+        {
+            <div class="j-grid">
+                @foreach (var f in _results.Items)
+                {
+                    <FirmCard Firm="f" />
+                }
+            </div>
+        }
+
+        @if (_results.TotalPages > 1)
+        {
+            <div class="j-pagination">
+                @if (_results.HasPrevious)
+                {
+                    <a href="@PageUrl(_results.Page - 1)">← Prev</a>
+                }
+                else
+                {
+                    <span class="disabled">← Prev</span>
+                }
+                <span class="active">@_results.Page / @_results.TotalPages</span>
+                @if (_results.HasNext)
+                {
+                    <a href="@PageUrl(_results.Page + 1)">Next →</a>
+                }
+                else
+                {
+                    <span class="disabled">Next →</span>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")] public string? _q { get; set; }
+    [SupplyParameterFromQuery(Name = "city")] public string? _city { get; set; }
+    [SupplyParameterFromQuery(Name = "practice")] public string? _practice { get; set; }
+    [SupplyParameterFromQuery(Name = "minSalary")] public int? _minSalary { get; set; }
+    [SupplyParameterFromQuery(Name = "maxSalary")] public int? _maxSalary { get; set; }
+    [SupplyParameterFromQuery(Name = "peer")] public string? _peerRaw { get; set; }
+    [SupplyParameterFromQuery(Name = "verified")] public bool _verifiedOnly { get; set; }
+    [SupplyParameterFromQuery(Name = "sort")] public string? _sortRaw { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int _page { get; set; } = 1;
+
+    private PeerGroup? _peer;
+    private FirmSort _sort = FirmSort.NameAsc;
+
+    private PagedResult<FirmListItemDto> _results = new();
+    private IReadOnlyList<string> _cities = Array.Empty<string>();
+    private IReadOnlyList<(string Slug, string Name)> _practiceAreas = Array.Empty<(string, string)>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _peer = Enum.TryParse<PeerGroup>(_peerRaw, ignoreCase: true, out var pg) ? pg : (PeerGroup?)null;
+        _sort = Enum.TryParse<FirmSort>(_sortRaw, ignoreCase: true, out var s) ? s : FirmSort.NameAsc;
+
+        _cities = await FirmService.GetCitiesAsync();
+        _practiceAreas = await FirmService.GetPracticeAreasAsync();
+
+        _results = await FirmService.SearchAsync(new FirmFilter(
+            Search: string.IsNullOrWhiteSpace(_q) ? null : _q,
+            City: string.IsNullOrWhiteSpace(_city) ? null : _city,
+            PracticeAreaSlug: string.IsNullOrWhiteSpace(_practice) ? null : _practice,
+            MinSalary: _minSalary,
+            MaxSalary: _maxSalary,
+            PeerGroup: _peer,
+            VerifiedOnly: _verifiedOnly ? true : null,
+            Sort: _sort,
+            Page: Math.Max(1, _page),
+            PageSize: 24));
+    }
+
+    private bool HasAnyFilter() =>
+        !string.IsNullOrWhiteSpace(_q) || !string.IsNullOrWhiteSpace(_city) ||
+        !string.IsNullOrWhiteSpace(_practice) || _minSalary.HasValue || _maxSalary.HasValue ||
+        _peer.HasValue || _verifiedOnly || _sort != FirmSort.NameAsc;
+
+    private string PageUrl(int page)
+    {
+        var qs = new List<string>();
+        if (!string.IsNullOrWhiteSpace(_q)) qs.Add($"q={Uri.EscapeDataString(_q)}");
+        if (!string.IsNullOrWhiteSpace(_city)) qs.Add($"city={Uri.EscapeDataString(_city)}");
+        if (!string.IsNullOrWhiteSpace(_practice)) qs.Add($"practice={Uri.EscapeDataString(_practice)}");
+        if (_minSalary.HasValue) qs.Add($"minSalary={_minSalary}");
+        if (_maxSalary.HasValue) qs.Add($"maxSalary={_maxSalary}");
+        if (_peer.HasValue) qs.Add($"peer={_peer}");
+        if (_verifiedOnly) qs.Add("verified=true");
+        if (_sort != FirmSort.NameAsc) qs.Add($"sort={_sort}");
+        qs.Add($"page={page}");
+        return "/firms?" + string.Join("&", qs);
+    }
+
+    private static string PeerLabel(PeerGroup g) => g switch
+    {
+        PeerGroup.SevenSisters => "Seven Sisters",
+        PeerGroup.NationalFullService => "National Full-Service",
+        PeerGroup.Boutique => "Boutique",
+        PeerGroup.MidLaw => "Mid-Law",
+        PeerGroup.USFirmCanadianOffice => "US Firm · Canadian Office",
+        PeerGroup.Inhouse => "In-house",
+        PeerGroup.Government => "Government",
+        _ => g.ToString(),
+    };
+}

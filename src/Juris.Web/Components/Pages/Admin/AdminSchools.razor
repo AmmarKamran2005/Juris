@@ -1,0 +1,234 @@
+@page "/admin/schools"
+@page "/admin/schools/new"
+@page "/admin/schools/{Id:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireAdmin")]
+@rendermode InteractiveServer
+@implements IDisposable
+@inject Juris.Application.Common.IApplicationDbContext Db
+@inject NavigationManager Nav
+@inject IJSRuntime Js
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>@(_editing is null ? "Schools" : "Edit school") · Admin · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/admin" class="j-plain">← Admin</a></div>
+        <h1 style="font-size: clamp(28px, 4vw, 44px);">
+            @(_editing is null ? "Schools" : (_editing.Id == Guid.Empty ? "New school" : "Edit school"))
+        </h1>
+    </div>
+</section>
+
+@if (_editing is null && (Id.HasValue || _isNew))
+{
+    <section class="j-section">
+        <div class="j-container"><div class="j-empty">Loading…</div></div>
+    </section>
+}
+else if (_editing is not null)
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container j-narrow">
+            @if (_message is not null)
+            {
+                <div class="j-alert j-alert-success">@_message</div>
+            }
+
+            <EditForm Model="_editing" OnValidSubmit="Save" FormName="school-edit">
+                <h3 class="j-mb-4">Identity</h3>
+                <div class="j-form-row"><label>Name</label><InputText class="j-input" @bind-Value="_editing.Name" /></div>
+                <div class="j-form-row"><label>Short name</label><InputText class="j-input" @bind-Value="_editing.ShortName" /></div>
+                <div class="j-form-row">
+                    <label>Slug @(string.IsNullOrEmpty(_editing.Slug) ? "(empty — click Auto)" : "")</label>
+                    <div style="display:flex; gap:8px;">
+                        <InputText class="j-input" @bind-Value="_editing.Slug" />
+                        <button type="button" class="j-button j-small j-plain" @onclick="AutoSlug">Auto</button>
+                    </div>
+                </div>
+                <div class="j-form-row"><label>City</label><InputText class="j-input" @bind-Value="_editing.City" /></div>
+                <div class="j-form-row"><label>Logo URL</label><InputText class="j-input" @bind-Value="_editing.LogoUrl" /></div>
+                <div class="j-form-row"><label>Website URL</label><InputText class="j-input" @bind-Value="_editing.WebsiteUrl" /></div>
+
+                <h3 class="j-mt-8 j-mb-4">Comparison Matrix data</h3>
+                <div class="j-form-row"><label>Annual tuition (CAD)</label><InputNumber class="j-input" @bind-Value="_editing.AnnualTuitionCad" /></div>
+                <div class="j-form-row"><label>Class size</label><InputNumber class="j-input" @bind-Value="_editing.ClassSize" /></div>
+                <div class="j-form-row"><label>Median LSAT</label><InputNumber class="j-input" @bind-Value="_editing.MedianLsat" step="0.1" /></div>
+                <div class="j-form-row"><label>Median GPA</label><InputNumber class="j-input" @bind-Value="_editing.MedianGpa" step="0.01" /></div>
+                <div class="j-form-row"><label>9-mo. employment %</label><InputNumber class="j-input" @bind-Value="_editing.EmploymentRateAt9MonthsPct" step="0.1" /></div>
+                <div class="j-form-row"><label>Seven Sisters hire %</label><InputNumber class="j-input" @bind-Value="_editing.SevenSistersHireRatePct" step="0.1" /></div>
+                <div class="j-form-row"><label>Bar pass %</label><InputNumber class="j-input" @bind-Value="_editing.BarPassRatePct" step="0.1" /></div>
+
+                <h3 class="j-mt-8 j-mb-4">Deep-dive notes</h3>
+                <div class="j-form-row"><label>About (HTML)</label><InputTextArea class="j-textarea" @bind-Value="_editing.AboutHtml" /></div>
+                <div class="j-form-row"><label>Mooting</label><InputTextArea class="j-textarea" @bind-Value="_editing.MootingNotes" /></div>
+                <div class="j-form-row"><label>Clinics</label><InputTextArea class="j-textarea" @bind-Value="_editing.ClinicNotes" /></div>
+                <div class="j-form-row"><label>Pre-Law pathway</label><InputTextArea class="j-textarea" @bind-Value="_editing.PreLawPathwayNotes" /></div>
+                <div class="j-form-row"><label>Career outcomes</label><InputTextArea class="j-textarea" @bind-Value="_editing.CareerOutcomesNotes" /></div>
+                <div class="j-form-row">
+                    <label style="font-family: var(--juris-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; display: flex; align-items: center; gap: 8px;">
+                        <InputCheckbox @bind-Value="_editing.IsPublished" /> Published
+                    </label>
+                </div>
+
+                <div class="j-mt-8" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                    <button type="submit" class="j-button j-primary" disabled="@_busy">@(_busy ? "Saving…" : "Save")</button>
+                    <a href="/admin/schools" class="j-button j-plain">Cancel</a>
+                    @if (_editing.Id != Guid.Empty)
+                    {
+                        <a href="/schools/@_editing.Slug" target="_blank" rel="noopener" class="j-button j-plain">Preview ↗</a>
+                        <span style="flex: 1;"></span>
+                        <button type="button" class="j-button" @onclick="Delete" disabled="@_busy" style="border-color: var(--juris-fg);">Delete</button>
+                    }
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+else
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container">
+            <div class="j-flex-between j-mb-6">
+                <span class="j-text-grey" style="font-family: var(--juris-sans); font-size: 13px;">@_schools.Count schools.</span>
+                <a href="/admin/schools/new" class="j-button j-primary">+ New school</a>
+            </div>
+            <table class="j-table">
+                <thead>
+                    <tr><th>School</th><th>City</th><th class="j-table-numeric">Tuition</th><th class="j-table-numeric">LSAT</th><th>Status</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in _schools)
+                    {
+                        <tr>
+                            <td><strong>@s.Name</strong> @if(!string.IsNullOrEmpty(s.ShortName)){<span class="j-text-grey">(@s.ShortName)</span>}</td>
+                            <td>@s.City</td>
+                            <td class="j-table-numeric">@(s.AnnualTuitionCad.HasValue ? "$" + s.AnnualTuitionCad.Value.ToString("N0") : "—")</td>
+                            <td class="j-table-numeric">@(s.MedianLsat?.ToString("0") ?? "—")</td>
+                            <td>@(s.IsPublished ? "Live" : "Draft")</td>
+                            <td><a href="/admin/schools/@s.Id" class="j-button j-small j-plain">Edit</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    private bool _isNew;
+    private List<School> _schools = new();
+    private School? _editing;
+    private string? _message;
+    private bool _busy;
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _editing = null;
+        _message = null;
+
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/');
+        _isNew = path.EndsWith("/admin/schools/new", StringComparison.OrdinalIgnoreCase);
+
+        if (_isNew)
+        {
+            _editing = new School
+            {
+                Id = Guid.Empty,
+                Slug = "",
+                Name = "",
+                City = "",
+                Province = "Ontario",
+                IsPublished = false,
+            };
+            return;
+        }
+
+        if (Id.HasValue)
+        {
+            _editing = await Db.Schools.FirstOrDefaultAsync(s => s.Id == Id.Value);
+            if (_editing is null) { Nav.NavigateTo("/admin/schools"); return; }
+            return;
+        }
+
+        _editing = null;
+        _schools = await Db.Schools.OrderBy(s => s.Name).AsNoTracking().ToListAsync();
+    }
+
+    private void AutoSlug()
+    {
+        if (_editing is null) return;
+        if (!string.IsNullOrWhiteSpace(_editing.Name))
+            _editing.Slug = Juris.Application.Common.Slug.From(_editing.Name);
+    }
+
+    private async Task Save()
+    {
+        if (_editing is null) return;
+        _busy = true;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_editing.Slug) && !string.IsNullOrWhiteSpace(_editing.Name))
+                _editing.Slug = Juris.Application.Common.Slug.From(_editing.Name);
+
+            if (_editing.Id == Guid.Empty)
+            {
+                _editing.Id = Guid.NewGuid();
+                Db.Schools.Add(_editing);
+            }
+            _editing.UpdatedAtUtc = DateTime.UtcNow;
+            await Db.SaveChangesAsync();
+            _message = "Saved.";
+            Nav.NavigateTo($"/admin/schools/{_editing.Id}");
+        }
+        catch (Exception ex)
+        {
+            _message = "Error: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task Delete()
+    {
+        if (_editing is null || _editing.Id == Guid.Empty) return;
+        var ok = await Js.InvokeAsync<bool>("confirm",
+            $"Delete \"{_editing.Name}\"? This cannot be undone.");
+        if (!ok) return;
+
+        _busy = true;
+        try
+        {
+            var schoolId = _editing.Id;
+            var events = await Db.AnalyticsEvents.Where(e => e.SchoolId == schoolId).ToListAsync();
+            foreach (var ev in events) ev.SchoolId = null;
+            Db.Schools.Remove(_editing);
+            await Db.SaveChangesAsync();
+            Nav.NavigateTo("/admin/schools");
+        }
+        catch (Exception ex)
+        {
+            _message = "Delete failed: " + ex.Message;
+            _busy = false;
+        }
+    }
+}

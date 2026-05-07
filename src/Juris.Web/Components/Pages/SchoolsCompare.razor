@@ -1,0 +1,80 @@
+@page "/schools/compare"
+@inject ISchoolService SchoolService
+
+<PageTitle>Compare Schools · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 56px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/schools" class="j-plain">← All schools</a></div>
+        <h1 style="font-size: clamp(32px, 5vw, 56px);">Side-by-side comparison.</h1>
+        <p class="j-lede">Pure data. No viewbook noise.</p>
+    </div>
+</section>
+
+@if (_schools.Count == 0)
+{
+    <section class="j-section">
+        <div class="j-container">
+            <div class="j-empty">
+                Pick at least two schools from <a href="/schools" class="j-plain">/schools</a>, then click "Compare".
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container">
+            <div class="j-table-wrap">
+                <table class="j-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            @foreach (var s in _schools)
+                            {
+                                <th>
+                                    <a href="/schools/@s.Slug" class="j-plain"><strong style="color:var(--juris-bg);">@(s.ShortName ?? s.Name)</strong></a>
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>City</td>@foreach (var s in _schools) {<td>@s.City</td>}</tr>
+                        <tr><td>Annual tuition (CAD)</td>@foreach (var s in _schools) {<td class="j-table-numeric">@(s.AnnualTuitionCad.HasValue ? "$" + s.AnnualTuitionCad.Value.ToString("N0") : "—")</td>}</tr>
+                        <tr><td>Median LSAT</td>@foreach (var s in _schools) {<td class="j-table-numeric">@(s.MedianLsat?.ToString("0") ?? "—")</td>}</tr>
+                        <tr><td>Median GPA</td>@foreach (var s in _schools) {<td class="j-table-numeric">@(s.MedianGpa?.ToString("0.00") ?? "—")</td>}</tr>
+                        <tr><td>9-mo. employment</td>@foreach (var s in _schools) {<td class="j-table-numeric">@(s.EmploymentRateAt9MonthsPct.HasValue ? s.EmploymentRateAt9MonthsPct.Value.ToString("0") + "%" : "—")</td>}</tr>
+                        <tr><td>Seven Sisters hire</td>@foreach (var s in _schools) {<td class="j-table-numeric">@(s.SevenSistersHireRatePct.HasValue ? s.SevenSistersHireRatePct.Value.ToString("0") + "%" : "—")</td>}</tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="j-mt-8 j-flex" style="gap:12px;">
+                <a href="/schools" class="j-button j-plain">← Pick different schools</a>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "slugs")] public string? _slugs { get; set; }
+    [SupplyParameterFromQuery(Name = "s")] public string[]? _s { get; set; }
+
+    private IReadOnlyList<SchoolListItemDto> _schools = Array.Empty<SchoolListItemDto>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var combined = new List<string>();
+        if (!string.IsNullOrWhiteSpace(_slugs))
+            combined.AddRange(_slugs.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (_s is not null)
+            combined.AddRange(_s.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+        if (combined.Count == 0)
+        {
+            _schools = Array.Empty<SchoolListItemDto>();
+            return;
+        }
+        _schools = await SchoolService.GetForComparisonAsync(combined.Distinct());
+    }
+}

@@ -1,0 +1,44 @@
+@if (Points is not null && Points.Count > 1)
+{
+    var maxVal = Points.Max(p => p.Count);
+    if (maxVal <= 0) maxVal = 1;
+    var w = 600.0;
+    var h = 120.0;
+    var step = w / (Points.Count - 1);
+    var path = new System.Text.StringBuilder("M 0 ");
+    var area = new System.Text.StringBuilder("M 0 ");
+    for (int i = 0; i < Points.Count; i++)
+    {
+        var x = i * step;
+        var y = h - ((double)Points[i].Count / maxVal) * (h - 8) - 4;
+        if (i == 0)
+        {
+            path.Append(y.ToString("0.##"));
+            area.Append(y.ToString("0.##"));
+        }
+        else
+        {
+            path.Append(" L ").Append(x.ToString("0.##")).Append(' ').Append(y.ToString("0.##"));
+            area.Append(" L ").Append(x.ToString("0.##")).Append(' ').Append(y.ToString("0.##"));
+        }
+    }
+    area.Append(" L ").Append(w.ToString("0.##")).Append(' ').Append(h.ToString("0.##"));
+    area.Append(" L 0 ").Append(h.ToString("0.##")).Append(" Z");
+
+    <svg class="j-spark" viewBox="0 0 @w @h" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="@area.ToString()" fill="#F2F2F2" stroke="none" />
+        <path d="@path.ToString()" fill="none" stroke="#000000" stroke-width="2" stroke-linejoin="round" />
+    </svg>
+    <div class="j-flex-between" style="font-family: var(--juris-sans); font-size: 11px; color: var(--juris-grey-4); letter-spacing: 0.04em; margin-top: 6px;">
+        <span>@Points.First().Date.ToString("MMM d")</span>
+        <span>@Points.Last().Date.ToString("MMM d")</span>
+    </div>
+}
+else
+{
+    <div class="j-empty" style="padding: 24px;">Not enough data.</div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TimeSeriesPoint>? Points { get; set; }
+}

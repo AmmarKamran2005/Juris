@@ -1,0 +1,79 @@
+@page "/Account/RegisterConfirmation"
+
+@using System.Text
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using Juris.Infrastructure.Identity
+@using Juris.Infrastructure.Persistence
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Confirm your account · Juris</PageTitle>
+
+<section class="j-section" style="padding: var(--s-12) 0;">
+    <div class="j-container j-text-center" style="max-width: 64ch;">
+        <div class="j-eyebrow">Account Created</div>
+        <h1 style="margin-top: 16px;">One more step.</h1>
+        <StatusMessage Message="@statusMessage" />
+
+        @if (emailConfirmationLink is not null)
+        {
+            <p class="j-lede" style="margin: 24px auto;">
+                SMTP is not yet configured in this environment. Use the dev confirmation link below to confirm your account.
+            </p>
+            <div class="j-mt-6">
+                <a href="@emailConfirmationLink" class="j-button j-primary j-plain j-large">Confirm account →</a>
+            </div>
+        }
+        else
+        {
+            <p class="j-lede" style="margin: 24px auto;">
+                Please check your email to confirm your account, then come back and sign in.
+            </p>
+            <div class="j-flex" style="justify-content:center; gap:12px; margin-top:32px;">
+                <a href="/Account/Login" class="j-button j-primary j-plain">Back to sign in</a>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private string? emailConfirmationLink;
+    private string? statusMessage;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? Email { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Email is null)
+        {
+            RedirectManager.RedirectTo("");
+        }
+
+        var user = await UserManager.FindByEmailAsync(Email);
+        if (user is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            statusMessage = "Error finding user for unspecified email";
+        }
+        else if (EmailSender is IdentityNoOpEmailSender)
+        {
+            var userId = await UserManager.GetUserIdAsync(user);
+            var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+            code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+            emailConfirmationLink = NavigationManager.GetUriWithQueryParameters(
+                NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+                new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
+        }
+    }
+}

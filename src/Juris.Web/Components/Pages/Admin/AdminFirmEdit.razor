@@ -1,0 +1,260 @@
+@page "/admin/firms/new"
+@page "/admin/firms/{Id:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireAdmin")]
+@rendermode InteractiveServer
+@implements IDisposable
+@inject Juris.Application.Common.IApplicationDbContext Db
+@inject Microsoft.AspNetCore.Identity.UserManager<Juris.Infrastructure.Identity.ApplicationUser> UserManager
+@inject NavigationManager Nav
+@inject IJSRuntime Js
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>@(_firm is null ? "Firm" : (_firm.Id == Guid.Empty ? "New firm" : "Edit firm")) · Admin · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/admin/firms" class="j-plain">← All firms</a></div>
+        <h1 style="font-size: clamp(26px, 4vw, 40px);">
+            @(_firm?.Name is { Length: > 0 } n ? n : (_firm?.Id == Guid.Empty ? "New firm" : "Firm"))
+        </h1>
+    </div>
+</section>
+
+@if (_firm is null && (Id.HasValue || _isNew))
+{
+    <section class="j-section">
+        <div class="j-container"><div class="j-empty">Loading…</div></div>
+    </section>
+}
+else if (_firm is null)
+{
+    <section class="j-section">
+        <div class="j-container"><div class="j-empty">Firm not found.</div></div>
+    </section>
+}
+else
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container" style="max-width: 820px;">
+            @if (_message is not null)
+            {
+                <div class="j-alert j-alert-success">@_message</div>
+            }
+
+            <EditForm Model="_firm" OnValidSubmit="Save" FormName="admin-firm-edit">
+                <h3 class="j-mb-4">Status flags</h3>
+                <div class="j-form-row">
+                    <label style="font-family: var(--juris-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; display: flex; align-items: center; gap: 8px;">
+                        <InputCheckbox @bind-Value="_firm.IsPublished" /> Published (visible on public site)
+                    </label>
+                </div>
+                <div class="j-form-row">
+                    <label style="font-family: var(--juris-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; display: flex; align-items: center; gap: 8px;">
+                        <InputCheckbox @bind-Value="_firm.IsVerified" /> Verified (badge on profile)
+                    </label>
+                </div>
+                <div class="j-form-row">
+                    <label style="font-family: var(--juris-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; display: flex; align-items: center; gap: 8px;">
+                        <InputCheckbox @bind-Value="_firm.IsFeaturedPartner" /> Featured partner (homepage placement)
+                    </label>
+                </div>
+
+                <h3 class="j-mt-8 j-mb-4">HR account link</h3>
+                <div class="j-form-row">
+                    <label>Owner user ID (FirmHR)</label>
+                    <InputText class="j-input" @bind-Value="_firm.OwnerUserId" placeholder="AspNetUsers.Id GUID" />
+                </div>
+                <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 13px;">
+                    To link a user, create the user in <a href="/admin/users" class="j-plain">Users</a>, copy their ID,
+                    paste it above, and save. The user will see this firm on their /portal home.
+                </p>
+
+                <h3 class="j-mt-8 j-mb-4">Identity</h3>
+                <div class="j-form-row"><label>Name</label><InputText class="j-input" @bind-Value="_firm.Name" /></div>
+                <div class="j-form-row">
+                    <label>Slug @(string.IsNullOrEmpty(_firm.Slug) ? "(empty — click Auto)" : "")</label>
+                    <div style="display:flex; gap:8px;">
+                        <InputText class="j-input" @bind-Value="_firm.Slug" />
+                        <button type="button" class="j-button j-small j-plain" @onclick="AutoSlug">Auto</button>
+                    </div>
+                </div>
+                <div class="j-form-row"><label>City</label><InputText class="j-input" @bind-Value="_firm.City" /></div>
+                <div class="j-form-row"><label>Logo URL</label><InputText class="j-input" @bind-Value="_firm.LogoUrl" /></div>
+                <div class="j-form-row"><label>Apply URL</label><InputText class="j-input" @bind-Value="_firm.ApplyUrl" /></div>
+                <div class="j-form-row"><label>Early Careers URL</label><InputText class="j-input" @bind-Value="_firm.EarlyCareersUrl" /></div>
+                <div class="j-form-row">
+                    <label>Peer group</label>
+                    <InputSelect class="j-select" @bind-Value="_firm.PeerGroup">
+                        @foreach (var p in Enum.GetValues<PeerGroup>())
+                        {
+                            <option value="@p">@p</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <h3 class="j-mt-8 j-mb-4">Hard Data</h3>
+                <div class="j-form-row"><label>Articling salary</label><InputNumber class="j-input" @bind-Value="_firm.ArticlingSalary" /></div>
+                <div class="j-form-row"><label>1st-year associate salary</label><InputNumber class="j-input" @bind-Value="_firm.FirstYearAssociateSalary" /></div>
+                <div class="j-form-row"><label>Class size</label><InputNumber class="j-input" @bind-Value="_firm.ClassSize" /></div>
+                <div class="j-form-row"><label>Hireback rate (%)</label><InputNumber class="j-input" @bind-Value="_firm.RetentionRate" step="0.01" /></div>
+                <div class="j-form-row"><label>Billable target</label><InputNumber class="j-input" @bind-Value="_firm.BillableTarget" /></div>
+
+                <h3 class="j-mt-8 j-mb-4">Vibe</h3>
+                <div class="j-form-row"><label>Vibe summary</label><InputTextArea class="j-textarea" @bind-Value="_firm.VibeSummary" /></div>
+                <div class="j-form-row"><label>AI policy</label><InputTextArea class="j-textarea" @bind-Value="_firm.AiPolicy" /></div>
+                <div class="j-form-row"><label>Work-life balance</label><InputTextArea class="j-textarea" @bind-Value="_firm.WorkLifeBalance" /></div>
+                <div class="j-form-row"><label>Office culture</label><InputTextArea class="j-textarea" @bind-Value="_firm.OfficeCulture" /></div>
+
+                <div class="j-mt-8" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                    <button type="submit" class="j-button j-primary" disabled="@_busy">@(_busy ? "Saving…" : "Save changes")</button>
+                    <a href="/admin/firms" class="j-button j-plain">Cancel</a>
+                    @if (_firm.Id != Guid.Empty)
+                    {
+                        <a href="/firms/@_firm.Slug" target="_blank" rel="noopener" class="j-button j-plain">Preview ↗</a>
+                        <span style="flex: 1;"></span>
+                        <button type="button" class="j-button" @onclick="Delete" disabled="@_busy" style="border-color: var(--juris-fg);">Delete</button>
+                    }
+                </div>
+            </EditForm>
+        </div>
+    </section>
+
+    @if (_firm.Id != Guid.Empty)
+    {
+        <section class="j-section j-grey">
+            <div class="j-container" style="max-width: 1100px;">
+                <h2>Profile content</h2>
+                <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 14px;">
+                    Manage practice areas, perks, deadlines, and reviews for this firm.
+                </p>
+                <FirmContentEditor FirmId="@_firm.Id" />
+            </div>
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    private bool _isNew;
+    private Juris.Domain.Entities.Firm? _firm;
+    private string? _message;
+    private bool _busy;
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _firm = null;
+        _message = null;
+
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/');
+        _isNew = path.EndsWith("/admin/firms/new", StringComparison.OrdinalIgnoreCase);
+
+        if (_isNew)
+        {
+            _firm = new Juris.Domain.Entities.Firm
+            {
+                Id = Guid.Empty,
+                Slug = "",
+                Name = "",
+                City = "",
+                Province = "Ontario",
+                IsPublished = false,
+                IsVerified = false,
+                IsFeaturedPartner = false,
+                PeerGroup = PeerGroup.MidLaw,
+            };
+            return;
+        }
+
+        if (Id.HasValue)
+        {
+            _firm = await Db.Firms.FirstOrDefaultAsync(f => f.Id == Id.Value);
+        }
+    }
+
+    private void AutoSlug()
+    {
+        if (_firm is null) return;
+        if (!string.IsNullOrWhiteSpace(_firm.Name))
+            _firm.Slug = Juris.Application.Common.Slug.From(_firm.Name);
+    }
+
+    private async Task Save()
+    {
+        if (_firm is null) return;
+        _busy = true;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_firm.Slug) && !string.IsNullOrWhiteSpace(_firm.Name))
+                _firm.Slug = Juris.Application.Common.Slug.From(_firm.Name);
+
+            // Treat empty OwnerUserId string as null
+            if (string.IsNullOrWhiteSpace(_firm.OwnerUserId)) _firm.OwnerUserId = null;
+
+            if (_firm.Id == Guid.Empty)
+            {
+                _firm.Id = Guid.NewGuid();
+                Db.Firms.Add(_firm);
+            }
+            _firm.UpdatedAtUtc = DateTime.UtcNow;
+            await Db.SaveChangesAsync();
+            _message = "Saved.";
+            Nav.NavigateTo($"/admin/firms/{_firm.Id}");
+        }
+        catch (Exception ex)
+        {
+            _message = "Error: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task Delete()
+    {
+        if (_firm is null || _firm.Id == Guid.Empty) return;
+        var ok = await Js.InvokeAsync<bool>("confirm",
+            $"Delete \"{_firm.Name}\" and all its perks, practice areas, deadlines, and reviews? This cannot be undone.");
+        if (!ok) return;
+
+        _busy = true;
+        try
+        {
+            var firmId = _firm.Id;
+
+            // Unlink any FirmHR users pointing to this firm
+            var ownerUsers = await UserManager.Users.Where(u => u.FirmId == firmId).ToListAsync();
+            foreach (var u in ownerUsers) { u.FirmId = null; await UserManager.UpdateAsync(u); }
+
+            // Anonymize related analytics events
+            var events = await Db.AnalyticsEvents.Where(e => e.FirmId == firmId).ToListAsync();
+            foreach (var ev in events) ev.FirmId = null;
+
+            // Cascade-delete child rows. Children have OnDelete(Cascade) configured.
+            Db.Firms.Remove(_firm);
+            await Db.SaveChangesAsync();
+            Nav.NavigateTo("/admin/firms");
+        }
+        catch (Exception ex)
+        {
+            _message = "Delete failed: " + ex.Message;
+            _busy = false;
+        }
+    }
+}

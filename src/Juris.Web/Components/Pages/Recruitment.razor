@@ -1,0 +1,118 @@
+@page "/recruitment"
+@inject IRecruitmentService RecruitmentService
+
+<PageTitle>Recruitment Tracker · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 56px 0 40px;">
+    <div class="j-container">
+        <div class="j-eyebrow">The Recruitment Tracker</div>
+        <h1 style="font-size: clamp(34px, 5vw, 60px);">Every deadline. Every firm. Live.</h1>
+        <p class="j-lede">OCI countdowns, articling deadlines, and direct apply links — updated in real time across the Ontario recruit cycle.</p>
+
+        <div style="display: flex; gap: 8px; margin-top: 32px; flex-wrap: wrap;">
+            <a href="/recruitment" class="j-button @(string.IsNullOrEmpty(_typeRaw) ? "j-primary" : "")">All</a>
+            <a href="/recruitment?type=Oci" class="j-button @(_typeRaw == "Oci" ? "j-primary" : "")">OCI</a>
+            <a href="/recruitment?type=Articling" class="j-button @(_typeRaw == "Articling" ? "j-primary" : "")">Articling</a>
+            <a href="/recruitment?type=SummerStudent" class="j-button @(_typeRaw == "SummerStudent" ? "j-primary" : "")">2L Summer</a>
+            <a href="/recruitment?type=OneL" class="j-button @(_typeRaw == "OneL" ? "j-primary" : "")">1L Summer</a>
+            <span style="border-left: 1px solid var(--juris-grey-2); margin: 0 8px;"></span>
+            <a href="/recruitment?@AppendStatus("Open")" class="j-button @(_statusRaw == "Open" ? "j-primary" : "")">Open</a>
+            <a href="/recruitment?@AppendStatus("ClosingSoon")" class="j-button @(_statusRaw == "ClosingSoon" ? "j-primary" : "")">Closing soon</a>
+            <a href="/recruitment?@AppendStatus("Closed")" class="j-button @(_statusRaw == "Closed" ? "j-primary" : "")">Closed</a>
+        </div>
+    </div>
+</section>
+
+<section class="j-section" style="padding-top: 24px;">
+    <div class="j-container">
+        @if (_deadlines.Count == 0)
+        {
+            <div class="j-empty">No deadlines match the current filter.</div>
+        }
+        else
+        {
+            <table class="j-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Firm</th>
+                        <th>City</th>
+                        <th>Recruit</th>
+                        <th>Deadline</th>
+                        <th class="j-table-numeric">Days Left</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in _deadlines)
+                    {
+                        <tr>
+                            <td><span class="j-status-pill @StatusClass(d.Status)">@StatusLabel(d.Status)</span></td>
+                            <td>
+                                <a href="/firms/@d.FirmSlug" class="j-plain"><strong>@d.FirmName</strong></a>
+                                @if (d.IsVerified)
+                                {
+                                    <span class="j-tag j-verified" style="margin-left: 6px;">Verified</span>
+                                }
+                            </td>
+                            <td>@d.City</td>
+                            <td>@TypeLabel(d.Type)<div class="j-text-grey" style="font-size: 12px;">@d.Label</div></td>
+                            <td style="font-family: var(--juris-sans); font-size: 13px;">@d.DeadlineUtc.ToString("MMM d, yyyy")<div class="j-text-grey" style="font-size: 11px;">@d.DeadlineUtc.ToString("h:mm tt") UTC</div></td>
+                            <td class="j-table-numeric"><strong>@d.DaysRemaining</strong></td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(d.ApplyUrl) && d.Status != DeadlineStatus.Closed)
+                                {
+                                    <a href="@d.ApplyUrl" target="_blank" rel="noopener" class="j-button j-small j-plain"
+                                       data-track-click="DeadlineClick" data-firm-id="@d.FirmId">Apply ↗</a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "type")] public string? _typeRaw { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? _statusRaw { get; set; }
+
+    private IReadOnlyList<RecruitmentDeadlineDto> _deadlines = Array.Empty<RecruitmentDeadlineDto>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        DeadlineType? type = Enum.TryParse<DeadlineType>(_typeRaw, true, out var t) ? t : null;
+        DeadlineStatus? status = Enum.TryParse<DeadlineStatus>(_statusRaw, true, out var s) ? s : null;
+        _deadlines = await RecruitmentService.ListAsync(type, status);
+    }
+
+    private string AppendStatus(string status)
+    {
+        var qs = new List<string>();
+        if (!string.IsNullOrEmpty(_typeRaw)) qs.Add($"type={_typeRaw}");
+        qs.Add($"status={status}");
+        return string.Join("&", qs);
+    }
+
+    private static string StatusClass(DeadlineStatus s) => s switch
+    {
+        DeadlineStatus.Open => "j-open",
+        DeadlineStatus.ClosingSoon => "j-closing",
+        _ => "j-closed",
+    };
+    private static string StatusLabel(DeadlineStatus s) => s switch
+    {
+        DeadlineStatus.Open => "Open",
+        DeadlineStatus.ClosingSoon => "Closing",
+        _ => "Closed",
+    };
+    private static string TypeLabel(DeadlineType t) => t switch
+    {
+        DeadlineType.Oci => "OCI",
+        DeadlineType.Articling => "Articling",
+        DeadlineType.SummerStudent => "2L Summer",
+        DeadlineType.OneL => "1L Summer",
+        _ => t.ToString(),
+    };
+}

@@ -1,0 +1,40 @@
+@using Juris.Application.Articles
+@using Juris.Domain.Enums
+
+@if (Article is not null)
+{
+    <a class="j-article-card" href="/news/@Article.Slug" data-track-click="ArticleView" data-article-id="@Article.Id">
+        <div class="j-article-card-head">
+            <span class="j-article-cat">@CategoryLabel(Article.Category)</span>
+            @if (Article.IsFeatured)
+            {
+                <span class="j-article-flag">Featured</span>
+            }
+        </div>
+
+        <h3 class="j-article-card-title">@Article.Title</h3>
+
+        @if (!string.IsNullOrEmpty(Article.Excerpt))
+        {
+            <p class="j-article-card-excerpt">@Article.Excerpt</p>
+        }
+
+        <div class="j-article-card-foot">
+            <span class="j-article-author">@Article.AuthorName</span>
+            <span class="j-article-meta">@Article.PublishedAtUtc.ToString("MMM d") · @Article.ReadTimeMinutes min read</span>
+        </div>
+    </a>
+}
+
+@code {
+    [Parameter] public ArticleListItemDto? Article { get; set; }
+
+    public static string CategoryLabel(ArticleCategory c) => c switch
+    {
+        ArticleCategory.Careers => "Careers",
+        ArticleCategory.MarketNews => "Market News",
+        ArticleCategory.StudentLife => "Student Life",
+        ArticleCategory.TheVault => "The Vault",
+        _ => "News",
+    };
+}

@@ -1,0 +1,115 @@
+@page "/"
+@inject IFirmService Firms
+@inject IRecruitmentService Recruitment
+@inject IArticleService Articles
+@inject INewsletterService Newsletter
+
+<PageTitle>Juris — The Legal Intelligence Hub</PageTitle>
+<SeoHead Title="Juris — The Legal Intelligence Hub"
+         Description="The definitive directory of every major Ontario law firm, every law school, and every recruitment deadline that matters — built for 1Ls, 2Ls, articling students, and the firms that hire them."
+         ImageUrl="/img/juris-logo.png" />
+
+<section class="j-hero">
+    <div class="j-container">
+        <div class="j-eyebrow">2026 Ontario · Career Intelligence for Law Students</div>
+        <h1>The data behind every Bay Street and Ontario legal career.</h1>
+        <p class="j-lede">
+            Juris is the definitive directory of every major Ontario law firm, every law school, and every recruitment deadline that matters — built for 1Ls, 2Ls, articling students, and the firms that hire them.
+        </p>
+
+        <form class="j-search" method="get" action="/search" role="search">
+            <input type="search" name="q" placeholder="Search firms, schools, or salaries…" autocomplete="off" />
+            <button type="submit">Search</button>
+        </form>
+
+        @if (_upcomingDeadlines.Count > 0)
+        {
+            <div class="j-ticker" aria-label="Upcoming recruitment deadlines">
+                <div class="j-ticker-label">Recruitment · Live</div>
+                <div class="j-ticker-rail">
+                    @foreach (var d in _upcomingDeadlines)
+                    {
+                        <a class="j-ticker-item j-plain" href="/firms/@d.FirmSlug">
+                            <span class="@StatusClass(d.Status) j-status-pill">@StatusLabel(d.Status)</span>
+                            <strong>@d.FirmName</strong>
+                            <span class="j-text-grey">@d.Label</span>
+                            <span>· @d.DaysRemaining day@((d.DaysRemaining == 1) ? "" : "s")</span>
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+<section class="j-section">
+    <div class="j-container">
+        <div class="j-section-head">
+            <div>
+                <div class="j-eyebrow">Featured Partners</div>
+                <h2>The firms hiring this season.</h2>
+            </div>
+            <a href="/firms" class="j-button j-plain">Browse all firms →</a>
+        </div>
+        @if (_featured.Count == 0)
+        {
+            <div class="j-empty">No featured partners this cycle. <a href="/firms" class="j-plain">Browse the full directory →</a></div>
+        }
+        else
+        {
+            <div class="j-grid">
+                @foreach (var f in _featured)
+                {
+                    <FirmCard Firm="f" />
+                }
+            </div>
+        }
+    </div>
+</section>
+
+<section class="j-section j-grey">
+    <div class="j-container">
+        <div class="j-section-head">
+            <div>
+                <div class="j-eyebrow">Trending Insights</div>
+                <h2>What we are reading this week.</h2>
+            </div>
+            <a href="/news" class="j-button j-plain">All articles →</a>
+        </div>
+
+        <div class="j-grid">
+            @foreach (var a in _articles)
+            {
+                <ArticleCard Article="a" />
+            }
+        </div>
+    </div>
+</section>
+
+<NewsletterPanel HeadlineOverride="Get the 2026 Salary Report — first." />
+
+@code {
+    private IReadOnlyList<RecruitmentDeadlineDto> _upcomingDeadlines = Array.Empty<RecruitmentDeadlineDto>();
+    private IReadOnlyList<FirmListItemDto> _featured = Array.Empty<FirmListItemDto>();
+    private IReadOnlyList<ArticleListItemDto> _articles = Array.Empty<ArticleListItemDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _upcomingDeadlines = await Recruitment.GetUpcomingAsync(8);
+        _featured = await Firms.GetFeaturedAsync(6);
+        _articles = await Articles.GetTrendingAsync(3);
+    }
+
+    private static string StatusClass(DeadlineStatus s) => s switch
+    {
+        DeadlineStatus.Open => "j-open",
+        DeadlineStatus.ClosingSoon => "j-closing",
+        _ => "j-closed",
+    };
+    private static string StatusLabel(DeadlineStatus s) => s switch
+    {
+        DeadlineStatus.Open => "Open",
+        DeadlineStatus.ClosingSoon => "Closing",
+        _ => "Closed",
+    };
+}

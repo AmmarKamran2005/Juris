@@ -1,0 +1,88 @@
+@page "/news/{Slug}"
+@inject IArticleService ArticleService
+@inject IAnalyticsService Analytics
+
+@if (_article is null)
+{
+    <PageTitle>Article not found · Juris</PageTitle>
+    <section class="j-section">
+        <div class="j-container">
+            <div class="j-eyebrow">404</div>
+            <h1>Article not found.</h1>
+            <a href="/news" class="j-button j-primary j-plain j-mt-6">← Back to news</a>
+        </div>
+    </section>
+}
+else
+{
+    <PageTitle>@_article.Title · Juris</PageTitle>
+    <SeoHead Title="@($"{_article.Title} · Juris")"
+             Description="@(_article.Excerpt ?? _article.Subtitle)"
+             ImageUrl="@_article.FeaturedImageUrl"
+             Type="article" />
+
+    <section style="border-bottom: 1px solid var(--juris-fg); padding: 32px 0;">
+        <div class="j-container">
+            <div class="j-flex" style="font-family: var(--juris-sans); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--juris-grey-4);">
+                <a href="/news" class="j-plain">News</a>
+                <span>·</span>
+                <span>@CategoryLabel(_article.Category)</span>
+            </div>
+        </div>
+    </section>
+
+    <article class="j-section">
+        <div class="j-container" style="max-width: 760px;">
+            <h1 style="font-size: clamp(34px, 5vw, 60px); margin-top: 16px;">@_article.Title</h1>
+            @if (!string.IsNullOrEmpty(_article.Subtitle))
+            {
+                <p class="j-lede" style="margin-top: 12px;">@_article.Subtitle</p>
+            }
+            <div class="j-flex j-mt-6 j-text-grey" style="font-family: var(--juris-sans); font-size: 13px; gap: 12px;">
+                <span><strong style="color: var(--juris-fg);">@_article.AuthorName</strong></span>
+                <span>·</span>
+                <span>@_article.PublishedAtUtc.ToString("MMMM d, yyyy")</span>
+                <span>·</span>
+                <span>@_article.ReadTimeMinutes min read</span>
+            </div>
+
+            <div class="j-divider"></div>
+
+            <div class="j-prose" style="max-width: none;">
+                @((MarkupString)_article.BodyHtml)
+            </div>
+        </div>
+    </article>
+
+    <NewsletterPanel HeadlineOverride="More like this — direct." Source="@($"article:{_article.Slug}")" />
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [CascadingParameter] private HttpContext? HttpCtx { get; set; }
+    private ArticleDetailDto? _article;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _article = await ArticleService.GetBySlugAsync(Slug);
+        if (_article is null)
+        {
+            if (HttpCtx is not null) HttpCtx.Response.StatusCode = 404;
+            return;
+        }
+
+        await Analytics.TrackAsync(new AnalyticsEventInput(
+            Type: AnalyticsEventType.ArticleView,
+            ArticleId: _article.Id,
+            Path: $"/news/{_article.Slug}"));
+    }
+
+    private static string CategoryLabel(ArticleCategory c) => c switch
+    {
+        ArticleCategory.Careers => "Careers",
+        ArticleCategory.MarketNews => "Market News",
+        ArticleCategory.StudentLife => "Student Life",
+        ArticleCategory.TheVault => "The Vault",
+        _ => "News",
+    };
+}

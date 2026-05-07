@@ -1,0 +1,142 @@
+@page "/schools/{Slug}"
+@inject ISchoolService SchoolService
+
+@if (_school is null)
+{
+    <PageTitle>School not found · Juris</PageTitle>
+    <section class="j-section">
+        <div class="j-container">
+            <div class="j-eyebrow">404</div>
+            <h1>School not found.</h1>
+            <a href="/schools" class="j-button j-primary j-plain j-mt-6">← Back to schools</a>
+        </div>
+    </section>
+}
+else
+{
+    <PageTitle>@_school.Name · Juris</PageTitle>
+    <SeoHead Title="@($"{_school.Name} · Tuition, LSAT, Outcomes · Juris")"
+             Description="@($"{_school.Name} — tuition, median LSAT/GPA, employment at 9 months, Seven-Sisters hire rate, and deep-dive notes on mooting, clinics, and Pre-Law pathways.")"
+             ImageUrl="@_school.LogoUrl" />
+
+    <section style="border-bottom: 1px solid var(--juris-fg); padding: 32px 0;">
+        <div class="j-container">
+            <div class="j-flex" style="font-family: var(--juris-sans); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--juris-grey-4);">
+                <a href="/schools" class="j-plain">Schools</a>
+                <span>·</span>
+                <span>@_school.City</span>
+            </div>
+            <h1 style="font-size: clamp(34px, 5vw, 56px); margin-top: 16px; margin-bottom: 8px;">@_school.Name</h1>
+            @if (!string.IsNullOrEmpty(_school.ShortName))
+            {
+                <div class="j-text-grey" style="font-family: var(--juris-sans); font-size: 14px;">Also known as @_school.ShortName</div>
+            }
+        </div>
+    </section>
+
+    <section class="j-section">
+        <div class="j-container">
+            <div class="j-stat-grid">
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Annual Tuition</div>
+                    <div class="j-stat-value">@(_school.AnnualTuitionCad.HasValue ? "$" + _school.AnnualTuitionCad.Value.ToString("N0") : "—")</div>
+                    <div class="j-stat-sub">CAD</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Class Size</div>
+                    <div class="j-stat-value">@(_school.ClassSize?.ToString() ?? "—")</div>
+                    <div class="j-stat-sub">JD students / cohort</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Median LSAT</div>
+                    <div class="j-stat-value">@(_school.MedianLsat.HasValue ? _school.MedianLsat.Value.ToString("0") : "—")</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Median GPA</div>
+                    <div class="j-stat-value">@(_school.MedianGpa.HasValue ? _school.MedianGpa.Value.ToString("0.00") : "—")</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">9-mo. Employment</div>
+                    <div class="j-stat-value">@(_school.EmploymentRateAt9MonthsPct.HasValue ? _school.EmploymentRateAt9MonthsPct.Value.ToString("0") + "%" : "—")</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Seven-Sisters Hire</div>
+                    <div class="j-stat-value">@(_school.SevenSistersHireRatePct.HasValue ? _school.SevenSistersHireRatePct.Value.ToString("0") + "%" : "—")</div>
+                    <div class="j-stat-sub">of cohort</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Bar Pass Rate</div>
+                    <div class="j-stat-value">@(_school.BarPassRatePct.HasValue ? _school.BarPassRatePct.Value.ToString("0") + "%" : "—")</div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_school.AboutHtml))
+            {
+                <div class="j-prose j-mt-6" style="max-width: 70ch;">@((MarkupString)_school.AboutHtml)</div>
+            }
+        </div>
+    </section>
+
+    @if (!string.IsNullOrEmpty(_school.MootingNotes) || !string.IsNullOrEmpty(_school.ClinicNotes) ||
+        !string.IsNullOrEmpty(_school.PreLawPathwayNotes) || !string.IsNullOrEmpty(_school.CareerOutcomesNotes))
+    {
+        <section class="j-section j-grey">
+            <div class="j-container">
+                <h2>Deep Dive</h2>
+                <div class="j-stat-grid" style="margin-top: 20px;">
+                    @if (!string.IsNullOrEmpty(_school.MootingNotes))
+                    {
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">Mooting</div>
+                            <p style="margin-top: 8px; font-family: var(--juris-serif); font-size: 16px; line-height: 1.6;">@_school.MootingNotes</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(_school.ClinicNotes))
+                    {
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">Clinics</div>
+                            <p style="margin-top: 8px; font-family: var(--juris-serif); font-size: 16px; line-height: 1.6;">@_school.ClinicNotes</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(_school.PreLawPathwayNotes))
+                    {
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">Pre-Law Pathway</div>
+                            <p style="margin-top: 8px; font-family: var(--juris-serif); font-size: 16px; line-height: 1.6;">@_school.PreLawPathwayNotes</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(_school.CareerOutcomesNotes))
+                    {
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">Career Outcomes</div>
+                            <p style="margin-top: 8px; font-family: var(--juris-serif); font-size: 16px; line-height: 1.6;">@_school.CareerOutcomesNotes</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
+    }
+
+    @if (!string.IsNullOrEmpty(_school.WebsiteUrl))
+    {
+        <section class="j-section">
+            <div class="j-container j-text-center">
+                <a href="@_school.WebsiteUrl" target="_blank" rel="noopener" class="j-button j-primary j-plain j-large">Visit @(_school.ShortName ?? _school.Name) ↗</a>
+            </div>
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [CascadingParameter] private HttpContext? HttpCtx { get; set; }
+    private SchoolDetailDto? _school;
+    protected override async Task OnParametersSetAsync()
+    {
+        _school = await SchoolService.GetBySlugAsync(Slug);
+        if (_school is null && HttpCtx is not null)
+        {
+            HttpCtx.Response.StatusCode = 404;
+        }
+    }
+}

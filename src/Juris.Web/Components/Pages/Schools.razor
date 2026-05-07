@@ -1,0 +1,113 @@
+@page "/schools"
+@inject ISchoolService SchoolService
+
+<PageTitle>Law Schools · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 56px 0 40px;">
+    <div class="j-container">
+        <div class="j-eyebrow">The Law School Hub</div>
+        <h1 style="font-size: clamp(34px, 5vw, 60px);">Compare every Ontario law school side-by-side.</h1>
+        <p class="j-lede">Tuition, median LSAT/GPA, employment outcomes, "Seven Sisters" hire rates — the data the schools won't put on their viewbooks.</p>
+    </div>
+</section>
+
+<section class="j-section">
+    <div class="j-container">
+        <div class="j-section-head">
+            <div>
+                <div class="j-eyebrow">Comparison Matrix</div>
+                <h2>The data, side by side.</h2>
+            </div>
+            <span class="j-text-grey" style="font-family: var(--juris-sans); font-size: 13px;">@_schools.Count Ontario schools</span>
+        </div>
+
+        <form action="/schools/compare" method="get" class="j-mb-6">
+            <p class="j-text-grey j-mb-4" style="font-family: var(--juris-sans); font-size: 13px;">
+                Tick two or more schools and click <strong>Compare selected →</strong> for a side-by-side view.
+            </p>
+            <div style="overflow-x: auto;">
+                <table class="j-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;"></th>
+                            <th>School</th>
+                            <th>City</th>
+                            <th class="j-table-numeric">Tuition (CAD)</th>
+                            <th class="j-table-numeric">Median LSAT</th>
+                            <th class="j-table-numeric">Median GPA</th>
+                            <th class="j-table-numeric">9-mo. Employment</th>
+                            <th class="j-table-numeric">7-Sisters Hire</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in _schools)
+                        {
+                            <tr>
+                                <td><input type="checkbox" name="s" value="@s.Slug" style="width:16px;height:16px;accent-color:var(--juris-fg);" /></td>
+                                <td>
+                                    <a href="/schools/@s.Slug" class="j-plain"><strong>@s.Name</strong></a>
+                                    @if (!string.IsNullOrEmpty(s.ShortName))
+                                    {
+                                        <div class="j-text-grey" style="font-size: 12px;">@s.ShortName</div>
+                                    }
+                                </td>
+                                <td>@s.City</td>
+                                <td class="j-table-numeric">@(s.AnnualTuitionCad.HasValue ? "$" + s.AnnualTuitionCad.Value.ToString("N0") : "—")</td>
+                                <td class="j-table-numeric">@(s.MedianLsat.HasValue ? s.MedianLsat.Value.ToString("0") : "—")</td>
+                                <td class="j-table-numeric">@(s.MedianGpa.HasValue ? s.MedianGpa.Value.ToString("0.00") : "—")</td>
+                                <td class="j-table-numeric">@(s.EmploymentRateAt9MonthsPct.HasValue ? s.EmploymentRateAt9MonthsPct.Value.ToString("0") + "%" : "—")</td>
+                                <td class="j-table-numeric">@(s.SevenSistersHireRatePct.HasValue ? s.SevenSistersHireRatePct.Value.ToString("0") + "%" : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="j-mt-4">
+                <button type="submit" class="j-button j-primary">Compare selected →</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="j-section j-grey">
+    <div class="j-container">
+        <div class="j-section-head">
+            <h2>School Profiles</h2>
+        </div>
+        <div class="j-grid">
+            @foreach (var s in _schools)
+            {
+                <a class="j-card j-plain" href="/schools/@s.Slug" data-track-click="SchoolProfileView" data-school-id="@s.Id">
+                    <div class="j-card-logo">
+                        @if (!string.IsNullOrEmpty(s.LogoUrl))
+                        {
+                            <img src="@s.LogoUrl" alt="@s.Name logo"
+                                 onerror="this.style.display='none';this.parentElement.textContent=this.alt.substring(0,1);" />
+                        }
+                        else
+                        {
+                            @s.Name.Substring(0, 1)
+                        }
+                    </div>
+                    <h3>@s.Name</h3>
+                    <div class="j-card-meta">@s.City</div>
+                    <div class="j-card-stat">
+                        <span class="j-card-stat-label">Tuition</span>
+                        <span>@(s.AnnualTuitionCad.HasValue ? "$" + s.AnnualTuitionCad.Value.ToString("N0") : "—")</span>
+                    </div>
+                </a>
+            }
+        </div>
+    </div>
+</section>
+
+<NewsletterPanel HeadlineOverride="Law school admissions data, in your inbox." Source="schools" />
+
+@code {
+    private IReadOnlyList<SchoolListItemDto> _schools = Array.Empty<SchoolListItemDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _schools = await SchoolService.GetAllAsync();
+    }
+}

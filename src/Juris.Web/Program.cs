@@ -1,0 +1,127 @@
+using System.Threading.RateLimiting;
+using Juris.Application;
+using Juris.Infrastructure;
+using Juris.Infrastructure.Identity;
+using Juris.Infrastructure.Persistence;
+using Juris.Web.Components;
+using Juris.Web.Components.Account;
+using Juris.Web.Infrastructure;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
+
+namespace Juris.Web;
+
+public class Program
+{
+    public static async Task Main(string[] args)
+    {
+        var builder = WebApplication.CreateBuilder(args);
+
+        builder.Services.AddRazorComponents()
+            .AddInteractiveServerComponents()
+            .AddInteractiveWebAssemblyComponents();
+
+        builder.Services.AddCascadingAuthenticationState();
+        builder.Services.AddScoped<IdentityUserAccessor>();
+        builder.Services.AddScoped<IdentityRedirectManager>();
+        builder.Services.AddScoped<AuthenticationStateProvider, PersistingRevalidatingAuthenticationStateProvider>();
+
+        builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+            })
+            .AddIdentityCookies();
+
+        // Infrastructure registers ApplicationDbContext (SQL Server) from configuration.
+        builder.Services.AddInfrastructure(builder.Configuration);
+        builder.Services.AddApplication();
+
+        builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+        builder.Services.AddIdentityCore<ApplicationUser>(options =>
+            {
+                options.SignIn.RequireConfirmedAccount = false;
+                options.Password.RequireDigit = true;
+                options.Password.RequiredLength = 8;
+                options.Password.RequireNonAlphanumeric = false;
+                options.Password.RequireUppercase = true;
+                options.Password.RequireLowercase = true;
+                options.User.RequireUniqueEmail = true;
+            })
+            .AddRoles<IdentityRole>()
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddSignInManager()
+            .AddDefaultTokenProviders();
+
+        builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+
+        builder.Services.AddAuthorizationBuilder()
+            .AddPolicy("RequireAdmin", p => p.RequireRole(Roles.Admin))
+            .AddPolicy("RequireFirmHR", p => p.RequireRole(Roles.FirmHR, Roles.Admin));
+
+        builder.Services.AddRateLimiter(options =>
+        {
+            // Global cap on /api/analytics/track per IP — protects the event ingestion
+            // endpoint from spam without affecting normal student traffic.
+            options.AddPolicy("analytics-ingest", httpContext =>
+            {
+                var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anon";
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ =>
+                    new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 120,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    });
+            });
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        });
+
+        var app = builder.Build();
+
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseWebAssemblyDebugging();
+            app.UseMigrationsEndPoint();
+        }
+        else
+        {
+            app.UseExceptionHandler("/Error", createScopeForErrors: true);
+            app.UseHsts();
+        }
+
+        app.UseStatusCodePagesWithReExecute("/404");
+
+        // Only enforce HTTPS redirection in non-Development environments.
+        // Locally we run on plain http://localhost so this avoids the
+        // "Failed to determine the https port for redirect" warning.
+        if (!app.Environment.IsDevelopment())
+        {
+            app.UseHttpsRedirection();
+        }
+        app.UseStaticFiles();
+        app.UseRateLimiter();
+        app.UseAntiforgery();
+
+        app.MapRazorComponents<App>()
+            .AddInteractiveServerRenderMode()
+            .AddInteractiveWebAssemblyRenderMode()
+            .AddAdditionalAssemblies(typeof(Juris.Web.Client._Imports).Assembly);
+
+        app.MapAdditionalIdentityEndpoints();
+        app.MapAnalyticsEndpoints();
+        app.MapAdminUtilityEndpoints();
+        app.MapPublicEndpoints();
+
+        // Apply pending migrations and seed roles + default admin + sample data.
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            await DatabaseInitializer.InitializeAsync(scope.ServiceProvider);
+        }
+
+        app.Run();
+    }
+}

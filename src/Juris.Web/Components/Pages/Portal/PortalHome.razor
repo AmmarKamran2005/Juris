@@ -1,0 +1,78 @@
+@page "/portal"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireFirmHR")]
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthState
+@inject Microsoft.AspNetCore.Identity.UserManager<Juris.Infrastructure.Identity.ApplicationUser> UserManager
+@inject IFirmService Firms
+@inject Juris.Application.Common.IApplicationDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>HR Portal · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 56px 0 40px;">
+    <div class="j-container">
+        <div class="j-eyebrow">Verified Portal</div>
+        <h1 style="font-size: clamp(34px, 5vw, 56px);">Hi @(_user?.DisplayName ?? "team").</h1>
+        @if (_firm is not null)
+        {
+            <p class="j-lede">Manage <strong>@_firm.Name</strong>. Edit your profile, review your analytics, and own your story.</p>
+        }
+        else
+        {
+            <p class="j-lede">Your account isn't yet linked to a firm. <a href="mailto:partners@juris.local" class="j-plain">Contact partners@juris.local</a> to be linked.</p>
+        }
+    </div>
+</section>
+
+@if (_firm is not null)
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container">
+            <div class="j-stat-grid">
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Profile Views (30 days)</div>
+                    <div class="j-stat-value">@_views30</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Apply Clicks (30 days)</div>
+                    <div class="j-stat-value">@_apply30</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Verified</div>
+                    <div class="j-stat-value">@(_firm.IsVerified ? "Yes" : "Pending")</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap;">
+                <a href="/portal/firm" class="j-button j-primary j-plain">Edit Firm Profile →</a>
+                <a href="/portal/analytics" class="j-button j-plain">Open HR Dashboard →</a>
+                <a href="/firms/@_firm.Slug" class="j-button j-plain" target="_blank" rel="noopener">View public profile ↗</a>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    private Juris.Infrastructure.Identity.ApplicationUser? _user;
+    private Juris.Domain.Entities.Firm? _firm;
+    private int _views30;
+    private int _apply30;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        if (auth.User?.Identity?.IsAuthenticated != true) return;
+
+        _user = await UserManager.GetUserAsync(auth.User);
+        if (_user?.FirmId is null) return;
+
+        _firm = await Db.Firms.FirstOrDefaultAsync(f => f.Id == _user.FirmId);
+
+        var since = DateTime.UtcNow.AddDays(-30);
+        _views30 = await Db.AnalyticsEvents
+            .Where(e => e.FirmId == _user.FirmId && e.Type == AnalyticsEventType.FirmProfileView && e.TimestampUtc >= since)
+            .CountAsync();
+        _apply30 = await Db.AnalyticsEvents
+            .Where(e => e.FirmId == _user.FirmId && e.Type == AnalyticsEventType.ApplyButtonClick && e.TimestampUtc >= since)
+            .CountAsync();
+    }
+}

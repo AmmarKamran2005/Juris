@@ -1,0 +1,99 @@
+@inject INewsletterService Newsletter
+@rendermode InteractiveServer
+
+<section class="j-newsletter">
+    <div class="j-container j-newsletter-inner">
+        <div class="j-newsletter-copy">
+            <div class="j-eyebrow j-eyebrow-light">@Eyebrow</div>
+            <h2 class="j-newsletter-h">@(HeadlineOverride ?? "Get the data before the cohort does.")</h2>
+            <p class="j-newsletter-sub">
+                One email a month. The Salary Report drops in your inbox before it's public —
+                with anonymous, segmented insights for 1Ls, 2Ls, articling students, and junior associates.
+            </p>
+        </div>
+
+        <EditForm Model="_input" OnValidSubmit="Submit" FormName="newsletter-signup" class="j-newsletter-form">
+            <DataAnnotationsValidator />
+
+            @if (_message is not null)
+            {
+                <div class="j-newsletter-msg">@_message</div>
+            }
+
+            <div class="j-newsletter-primary">
+                <input type="email" @bind="_input.Email" placeholder="your@email.ca" required class="j-newsletter-email" aria-label="Email" />
+                <button type="submit" disabled="@_busy" class="j-newsletter-cta">
+                    @(_busy ? "Sending…" : "Subscribe →")
+                </button>
+            </div>
+
+            <div class="j-newsletter-optin">
+                <span class="j-newsletter-optin-label">Tell us about you (optional) —</span>
+                <select @bind="_input.University" class="j-newsletter-select" aria-label="University">
+                    <option value="">Your school</option>
+                    <option>University of Toronto</option>
+                    <option>Osgoode Hall</option>
+                    <option>Queen's University</option>
+                    <option>Western University</option>
+                    <option>University of Ottawa</option>
+                    <option>Windsor Law</option>
+                    <option>Lincoln Alexander (TMU)</option>
+                    <option>McMaster (Pre-Law)</option>
+                    <option>Other</option>
+                </select>
+                <select @bind="_input.YearOfStudy" class="j-newsletter-select" aria-label="Year of study">
+                    <option value="@YearOfStudy.Unknown">Year</option>
+                    <option value="@YearOfStudy.PreLaw">Pre-Law</option>
+                    <option value="@YearOfStudy.OneL">1L</option>
+                    <option value="@YearOfStudy.TwoL">2L</option>
+                    <option value="@YearOfStudy.ThreeL">3L</option>
+                    <option value="@YearOfStudy.Articling">Articling</option>
+                    <option value="@YearOfStudy.JuniorAssociate">Junior Associate</option>
+                </select>
+            </div>
+
+            <p class="j-newsletter-fineprint">
+                No spam. One email a month. Unsubscribe with one click.
+            </p>
+        </EditForm>
+    </div>
+</section>
+
+@code {
+    [Parameter] public string? HeadlineOverride { get; set; }
+    [Parameter] public string Eyebrow { get; set; } = "Newsletter · 2026 Salary Report";
+    [Parameter] public string Source { get; set; } = "homepage";
+
+    private SignupInput _input = new();
+    private string? _message;
+    private bool _busy;
+
+    private async Task Submit()
+    {
+        _busy = true;
+        try
+        {
+            var result = await Newsletter.SignupAsync(new NewsletterSignupRequest(
+                Email: _input.Email ?? string.Empty,
+                University: string.IsNullOrWhiteSpace(_input.University) ? null : _input.University,
+                YearOfStudy: _input.YearOfStudy,
+                Source: Source));
+            _message = result.Message;
+            if (result.Success)
+            {
+                _input = new SignupInput();
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private class SignupInput
+    {
+        public string? Email { get; set; }
+        public string? University { get; set; }
+        public YearOfStudy YearOfStudy { get; set; } = YearOfStudy.Unknown;
+    }
+}

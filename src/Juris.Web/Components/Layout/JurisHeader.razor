@@ -1,0 +1,50 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Nav
+
+<header class="j-header" id="j-header-root">
+    <div class="j-container j-header-inner">
+        <a href="/" class="j-brand j-plain">
+            <img src="/img/juris-logo.png" alt="Juris" />
+            <span>JURIS</span>
+        </a>
+        <nav class="j-nav" aria-label="Primary">
+            <a href="/firms" class="@NavClass("/firms")">Firms</a>
+            <a href="/schools" class="@NavClass("/schools")">Law Schools</a>
+            <a href="/recruitment" class="@NavClass("/recruitment")">Recruitment</a>
+            <a href="/news" class="@NavClass("/news")">News</a>
+            <a href="/about" class="@NavClass("/about")">About</a>
+        </nav>
+        <div class="j-header-cta">
+            <AuthorizeView>
+                <Authorized>
+                    @if (context.User.IsInRole("Admin"))
+                    {
+                        <a href="/admin" class="j-button j-small j-plain">Admin</a>
+                    }
+                    else if (context.User.IsInRole("FirmHR"))
+                    {
+                        <a href="/portal" class="j-button j-small j-plain">Portal</a>
+                    }
+                    <form action="Account/Logout" method="post" style="display:inline;">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="ReturnUrl" value="/" />
+                        <button type="submit" class="j-button j-small">Sign out</button>
+                    </form>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="/Account/Login" class="j-button j-small j-plain">Sign in</a>
+                    <a href="/verified" class="j-button j-small j-primary j-plain">For Firms</a>
+                </NotAuthorized>
+            </AuthorizeView>
+            <button class="j-mobile-toggle" aria-label="Toggle navigation" onclick="document.getElementById('j-header-root').classList.toggle('j-mobile-open')">≡</button>
+        </div>
+    </div>
+</header>
+
+@code {
+    private string NavClass(string prefix)
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath;
+        return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? "active" : "";
+    }
+}

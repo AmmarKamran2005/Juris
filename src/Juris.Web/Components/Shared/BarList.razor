@@ -1,0 +1,28 @@
+@if (Items is not null && Items.Count > 0)
+{
+    var max = Items.Max(i => i.Value);
+    if (max <= 0) max = 1;
+    <div>
+        @foreach (var i in Items)
+        {
+            var pct = Math.Min(100, i.Value * 100.0 / max);
+            <div class="j-bar-row">
+                <div class="j-bar-label">@i.Label</div>
+                <div class="j-bar-track">
+                    <div class="j-bar-fill" style="width:@pct.ToString("0.##")%"></div>
+                </div>
+                <div class="j-bar-value">@i.Display</div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="j-empty" style="padding: 24px;">No data yet for this window.</div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<BarItem>? Items { get; set; }
+
+    public sealed record BarItem(string Label, double Value, string Display);
+}

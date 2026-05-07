@@ -1,0 +1,164 @@
+@page "/admin/users/{Id}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireAdmin")]
+@rendermode InteractiveServer
+@inject Microsoft.AspNetCore.Identity.UserManager<Juris.Infrastructure.Identity.ApplicationUser> UserManager
+@inject Microsoft.AspNetCore.Identity.RoleManager<Microsoft.AspNetCore.Identity.IdentityRole> RoleManager
+@inject Juris.Application.Common.IApplicationDbContext Db
+@inject NavigationManager Nav
+@using Microsoft.EntityFrameworkCore
+@using Juris.Infrastructure.Identity
+
+<PageTitle>Edit user · Admin · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/admin/users" class="j-plain">← All users</a></div>
+        <h1 style="font-size: clamp(26px, 4vw, 40px);">@(_user?.Email ?? "User")</h1>
+    </div>
+</section>
+
+@if (_user is null)
+{
+    <section class="j-section">
+        <div class="j-container"><div class="j-empty">User not found.</div></div>
+    </section>
+}
+else
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container j-narrow">
+            @if (_message is not null)
+            {
+                <div class="j-alert j-alert-success">@_message</div>
+            }
+
+            <h3 class="j-mb-4">Profile</h3>
+            <div class="j-form-row"><label>Email</label><input class="j-input" @bind="_user.Email" /></div>
+            <div class="j-form-row"><label>Display name</label><input class="j-input" @bind="_user.DisplayName" /></div>
+            <div class="j-form-row"><label>University</label><input class="j-input" @bind="_user.University" /></div>
+            <div class="j-form-row">
+                <label>Year of study</label>
+                <select class="j-select" @bind="_user.YearOfStudy">
+                    @foreach (var y in Enum.GetValues<YearOfStudy>())
+                    {
+                        <option value="@y">@y</option>
+                    }
+                </select>
+            </div>
+            <div class="j-form-row">
+                <label>Linked firm (FirmHR users)</label>
+                <select class="j-select" @bind="_user.FirmId">
+                    <option value="">— none —</option>
+                    @foreach (var f in _firms)
+                    {
+                        <option value="@f.Id">@f.Name (@f.City)</option>
+                    }
+                </select>
+            </div>
+            <button class="j-button j-primary" @onclick="SaveProfile" disabled="@_busy">@(_busy ? "Saving…" : "Save profile")</button>
+
+            <h3 class="j-mt-8 j-mb-4">Roles</h3>
+            <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px;">
+                @foreach (var r in Roles.All)
+                {
+                    bool inRole = _currentRoles.Contains(r);
+                    <label style="display:flex;align-items:center;gap:8px;font-family:var(--juris-sans);">
+                        <input type="checkbox" checked="@inRole" @onchange="(e) => ToggleRole(r, (bool)(e.Value ?? false))" />
+                        @r
+                    </label>
+                }
+            </div>
+
+            <h3 class="j-mt-8 j-mb-4">Reset password</h3>
+            <div class="j-form-row"><label>New password (min 8, mixed case + digit)</label><input type="password" class="j-input" @bind="_newPassword" /></div>
+            <button class="j-button" @onclick="ResetPassword" disabled="@(_busy || string.IsNullOrEmpty(_newPassword))">Set new password</button>
+
+            <h3 class="j-mt-8 j-mb-4" style="color:#000;">Danger zone</h3>
+            <div style="border:1px solid var(--juris-fg); padding:16px;">
+                <p style="font-family:var(--juris-sans); font-size:13px; margin-bottom:12px;">
+                    Permanently delete this account. Their analytics events stay (anonymized — UserId is set to null on delete).
+                </p>
+                <button class="j-button" @onclick="DeleteUser" disabled="@_busy">Delete user</button>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+    private ApplicationUser? _user;
+    private List<Juris.Domain.Entities.Firm> _firms = new();
+    private IList<string> _currentRoles = new List<string>();
+    private string? _newPassword;
+    private string? _message;
+    private bool _busy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = await UserManager.FindByIdAsync(Id);
+        if (_user is null) return;
+        _currentRoles = await UserManager.GetRolesAsync(_user);
+        _firms = await Db.Firms.OrderBy(f => f.Name).AsNoTracking().ToListAsync();
+    }
+
+    private async Task SaveProfile()
+    {
+        if (_user is null) return;
+        _busy = true;
+        try
+        {
+            _user.UserName = _user.Email;
+            var result = await UserManager.UpdateAsync(_user);
+            _message = result.Succeeded ? "Profile saved." : "Error: " + string.Join("; ", result.Errors.Select(e => e.Description));
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ToggleRole(string role, bool add)
+    {
+        if (_user is null) return;
+        _busy = true;
+        try
+        {
+            if (add) await UserManager.AddToRoleAsync(_user, role);
+            else await UserManager.RemoveFromRoleAsync(_user, role);
+            _currentRoles = await UserManager.GetRolesAsync(_user);
+            _message = $"Role {role} {(add ? "added" : "removed")}.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ResetPassword()
+    {
+        if (_user is null || string.IsNullOrEmpty(_newPassword)) return;
+        _busy = true;
+        try
+        {
+            var token = await UserManager.GeneratePasswordResetTokenAsync(_user);
+            var result = await UserManager.ResetPasswordAsync(_user, token, _newPassword);
+            _message = result.Succeeded ? "Password reset." : "Error: " + string.Join("; ", result.Errors.Select(e => e.Description));
+            if (result.Succeeded) _newPassword = null;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DeleteUser()
+    {
+        if (_user is null) return;
+        _busy = true;
+        try
+        {
+            // Anonymize analytics events first (preserve aggregate value)
+            var userId = _user.Id;
+            var events = await Db.AnalyticsEvents.Where(e => e.UserId == userId).ToListAsync();
+            foreach (var ev in events) ev.UserId = null;
+            // If the user owned a firm, unlink it
+            var firmsOwned = await Db.Firms.Where(f => f.OwnerUserId == userId).ToListAsync();
+            foreach (var f in firmsOwned) f.OwnerUserId = null;
+            await Db.SaveChangesAsync();
+            await UserManager.DeleteAsync(_user);
+            Nav.NavigateTo("/admin/users");
+        }
+        finally { _busy = false; }
+    }
+}

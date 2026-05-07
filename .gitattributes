@@ -1,0 +1,29 @@
+* text=auto eol=lf
+
+# C# / ASP.NET
+*.cs        text diff=csharp
+*.csproj    text merge=union
+*.sln       text eol=crlf merge=union
+*.razor     text
+*.cshtml    text
+*.json      text
+
+# Web assets
+*.css       text
+*.js        text
+*.html      text
+*.svg       text
+*.xml       text
+
+# Binaries
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.dll       binary
+*.exe       binary
+
+# Linguist overrides for stats accuracy
+*.razor    linguist-language=Razor

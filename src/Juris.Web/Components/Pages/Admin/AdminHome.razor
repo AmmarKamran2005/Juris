@@ -1,0 +1,129 @@
+@page "/admin"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireAdmin")]
+@inject IAnalyticsService Analytics
+@inject Juris.Application.Common.IApplicationDbContext Db
+@inject INewsletterService Newsletter
+@inject Microsoft.AspNetCore.Identity.UserManager<Juris.Infrastructure.Identity.ApplicationUser> UserManager
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Admin · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 56px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow">Juris Admin</div>
+        <h1 style="font-size: clamp(34px, 5vw, 56px);">Editorial &amp; Operations</h1>
+        <p class="j-lede">Run the platform.</p>
+    </div>
+</section>
+
+<section class="j-section" style="padding-top: 24px;">
+    <div class="j-container">
+        <div class="j-eyebrow">Today</div>
+        <div class="j-stat-grid j-mt-4">
+            <div class="j-stat-cell">
+                <div class="j-stat-label">Profile views</div>
+                <div class="j-stat-value">@(_snap?.FirmProfileViewsToday ?? 0)</div>
+            </div>
+            <div class="j-stat-cell">
+                <div class="j-stat-label">School views</div>
+                <div class="j-stat-value">@(_snap?.SchoolProfileViewsToday ?? 0)</div>
+            </div>
+            <div class="j-stat-cell">
+                <div class="j-stat-label">Article reads</div>
+                <div class="j-stat-value">@(_snap?.ArticleViewsToday ?? 0)</div>
+            </div>
+            <div class="j-stat-cell">
+                <div class="j-stat-label">Apply clicks</div>
+                <div class="j-stat-value">@(_snap?.ApplyClicksToday ?? 0)</div>
+            </div>
+            <div class="j-stat-cell">
+                <div class="j-stat-label">Newsletter signups</div>
+                <div class="j-stat-value">@(_snap?.NewsletterSignupsToday ?? 0)</div>
+            </div>
+            <div class="j-stat-cell">
+                <div class="j-stat-label">Subscribers (total)</div>
+                <div class="j-stat-value">@_subscribers</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="j-section j-grey">
+    <div class="j-container">
+        <h2>30-day events</h2>
+        <Sparkline Points="_snap?.EventsByDayLast30 ?? new List<TimeSeriesPoint>()" />
+    </div>
+</section>
+
+<section class="j-section">
+    <div class="j-container">
+        <h2>Manage</h2>
+        <div class="j-stat-grid j-mt-6">
+            <a href="/admin/firms" class="j-stat-cell j-plain" style="cursor:pointer;">
+                <div class="j-stat-label">@_firmCount Firms</div>
+                <div class="j-stat-value" style="font-size: 22px;">Manage Firms →</div>
+                <p class="j-mt-2 j-text-grey">Add, edit, verify, feature, and assign HR users.</p>
+            </a>
+            <a href="/admin/schools" class="j-stat-cell j-plain" style="cursor:pointer;">
+                <div class="j-stat-label">@_schoolCount Schools</div>
+                <div class="j-stat-value" style="font-size: 22px;">Manage Schools →</div>
+                <p class="j-mt-2 j-text-grey">Edit comparison-matrix data and deep-dive notes.</p>
+            </a>
+            <a href="/admin/articles" class="j-stat-cell j-plain" style="cursor:pointer;">
+                <div class="j-stat-label">@_articleCount Articles</div>
+                <div class="j-stat-value" style="font-size: 22px;">Manage Articles →</div>
+                <p class="j-mt-2 j-text-grey">News, Vault, Market News, Student Life.</p>
+            </a>
+            <a href="/admin/users" class="j-stat-cell j-plain" style="cursor:pointer;">
+                <div class="j-stat-label">@_userCount Users</div>
+                <div class="j-stat-value" style="font-size: 22px;">Manage Users →</div>
+                <p class="j-mt-2 j-text-grey">Provision FirmHR users, assign firms, set roles.</p>
+            </a>
+            <a href="/admin/subscribers" class="j-stat-cell j-plain" style="cursor:pointer;">
+                <div class="j-stat-label">@_subscribers Subscribers</div>
+                <div class="j-stat-value" style="font-size: 22px;">Newsletter →</div>
+                <p class="j-mt-2 j-text-grey">View signups, segment by school &amp; year, export CSV.</p>
+            </a>
+            <a href="/admin/import" class="j-stat-cell j-plain" style="cursor:pointer;">
+                <div class="j-stat-label">CSV import</div>
+                <div class="j-stat-value" style="font-size: 22px;">Bulk Upload →</div>
+                <p class="j-mt-2 j-text-grey">Import 200+ firms / schools / articles from CSV.</p>
+            </a>
+        </div>
+
+        <h3 class="j-mt-8 j-mb-4">Exports</h3>
+        <div class="j-flex" style="flex-wrap: wrap; gap: 8px;">
+            <a href="/admin/export/firms.csv" class="j-button j-plain">Firms CSV ↓</a>
+            <a href="/admin/export/subscribers.csv" class="j-button j-plain">Subscribers CSV ↓</a>
+            <a href="/admin/export/analytics.csv" class="j-button j-plain">Analytics (30d) CSV ↓</a>
+            <a href="/recruitment/feed.ics" class="j-button j-plain">Recruitment .ics ↓</a>
+        </div>
+    </div>
+</section>
+
+<section class="j-section j-grey">
+    <div class="j-container">
+        <h3>Top search terms (30 days)</h3>
+        @{
+            var termBars = (_snap?.TopSearchTerms ?? new List<SearchTermBreakdown>())
+                .Select(t => new BarList.BarItem(t.Term, t.Count, t.Count.ToString()))
+                .ToList();
+        }
+        <BarList Items="termBars" />
+    </div>
+</section>
+
+@code {
+    private GlobalAnalyticsSnapshotDto? _snap;
+    private int _firmCount, _schoolCount, _articleCount, _userCount, _subscribers;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _snap = await Analytics.GetGlobalSnapshotAsync();
+        _firmCount = await Db.Firms.CountAsync();
+        _schoolCount = await Db.Schools.CountAsync();
+        _articleCount = await Db.Articles.CountAsync();
+        _subscribers = await Newsletter.GetSubscriberCountAsync();
+        _userCount = await UserManager.Users.CountAsync();
+    }
+}

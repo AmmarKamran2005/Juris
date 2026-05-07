@@ -1,0 +1,54 @@
+@using Juris.Application.Firms
+
+@if (Firm is not null)
+{
+    <a class="j-card j-plain" href="/firms/@Firm.Slug" data-track-click="FirmProfileView" data-firm-id="@Firm.Id">
+        <div class="j-card-logo">
+            @if (!string.IsNullOrEmpty(Firm.LogoUrl))
+            {
+                <img src="@Firm.LogoUrl" alt="@Firm.Name logo"
+                     onerror="this.style.display='none';this.parentElement.textContent=this.alt.substring(0,1);" />
+            }
+            else
+            {
+                @Firm.Name.Substring(0, 1)
+            }
+        </div>
+        <div class="j-tags">
+            @if (Firm.IsFeaturedPartner)
+            {
+                <span class="j-tag j-featured">Partner</span>
+            }
+            @if (Firm.IsVerified)
+            {
+                <span class="j-tag j-verified">Verified</span>
+            }
+            @foreach (var p in Firm.PracticeAreaTags.Take(2))
+            {
+                <span class="j-tag">@p</span>
+            }
+        </div>
+        <h3>@Firm.Name</h3>
+        <div class="j-card-meta">@Firm.City · @PeerLabel(Firm.PeerGroup)</div>
+        <div class="j-card-stat">
+            <span class="j-card-stat-label">Articling</span>
+            <span>@(Firm.ArticlingSalary.HasValue ? "$" + Firm.ArticlingSalary.Value.ToString("N0") : "TBA")</span>
+        </div>
+    </a>
+}
+
+@code {
+    [Parameter] public FirmListItemDto? Firm { get; set; }
+
+    private static string PeerLabel(Juris.Domain.Enums.PeerGroup g) => g switch
+    {
+        Juris.Domain.Enums.PeerGroup.SevenSisters => "Seven Sisters",
+        Juris.Domain.Enums.PeerGroup.NationalFullService => "National Full-Service",
+        Juris.Domain.Enums.PeerGroup.Boutique => "Boutique",
+        Juris.Domain.Enums.PeerGroup.MidLaw => "Mid-Law",
+        Juris.Domain.Enums.PeerGroup.USFirmCanadianOffice => "US Firm · Canadian Office",
+        Juris.Domain.Enums.PeerGroup.Inhouse => "In-house",
+        Juris.Domain.Enums.PeerGroup.Government => "Government",
+        _ => "Firm",
+    };
+}

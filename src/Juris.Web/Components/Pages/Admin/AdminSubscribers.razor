@@ -1,0 +1,86 @@
+@page "/admin/subscribers"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireAdmin")]
+@inject Juris.Application.Common.IApplicationDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Newsletter Subscribers · Admin · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/admin" class="j-plain">← Admin</a></div>
+        <h1 style="font-size: clamp(28px, 4vw, 44px);">Newsletter subscribers</h1>
+        <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 14px;">
+            @_active active · @_unsub unsubscribed · @(_active + _unsub) total
+        </p>
+    </div>
+</section>
+
+<section class="j-section" style="padding-top: 24px;">
+    <div class="j-container">
+        <div class="j-flex-between j-mb-6">
+            <span class="j-text-grey" style="font-family: var(--juris-sans); font-size: 13px;">Most recent first.</span>
+            <a href="/admin/export/subscribers.csv" class="j-button j-small j-primary j-plain">Download CSV ↓</a>
+        </div>
+
+        @if (_subscribers.Count == 0)
+        {
+            <div class="j-empty">No subscribers yet. The newsletter signup is live on the homepage and the news section.</div>
+        }
+        else
+        {
+            <table class="j-table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>University</th>
+                        <th>Year</th>
+                        <th>Source</th>
+                        <th>Confirmed</th>
+                        <th>Joined</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in _subscribers)
+                    {
+                        <tr>
+                            <td><strong>@s.Email</strong></td>
+                            <td>@(s.University ?? "—")</td>
+                            <td>@(s.YearOfStudy == YearOfStudy.Unknown ? "—" : s.YearOfStudy.ToString())</td>
+                            <td><span class="j-text-grey">@s.Source</span></td>
+                            <td>@(s.IsConfirmed ? "Yes" : "Pending")</td>
+                            <td style="font-family: var(--juris-sans); font-size: 12px;">@s.CreatedAtUtc.ToString("MMM d, yyyy")</td>
+                            <td>
+                                @if (s.UnsubscribedAtUtc.HasValue)
+                                {
+                                    <span class="j-tag">Unsubscribed</span>
+                                }
+                                else
+                                {
+                                    <span class="j-tag j-verified">Active</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</section>
+
+@code {
+    private List<Juris.Domain.Entities.NewsletterSubscriber> _subscribers = new();
+    private int _active;
+    private int _unsub;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _subscribers = await Db.NewsletterSubscribers
+            .OrderByDescending(s => s.CreatedAtUtc)
+            .Take(500)
+            .AsNoTracking()
+            .ToListAsync();
+        _active = _subscribers.Count(s => !s.UnsubscribedAtUtc.HasValue);
+        _unsub = _subscribers.Count - _active;
+    }
+}

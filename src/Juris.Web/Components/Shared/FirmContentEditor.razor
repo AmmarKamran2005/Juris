@@ -1,0 +1,216 @@
+@rendermode InteractiveServer
+@inject Juris.Application.Common.IApplicationDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+@if (_firm is not null)
+{
+    <div>
+        @if (_message is not null)
+        {
+            <div class="j-alert j-alert-success">@_message</div>
+        }
+
+        <h2 class="j-mb-4">Practice Areas</h2>
+        <table class="j-table" style="margin-bottom: 24px;">
+            <thead><tr><th>Name</th><th>Slug</th><th>Core?</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var p in _firm.PracticeAreas)
+                {
+                    <tr>
+                        <td><input class="j-input" @bind="p.Name" style="margin:0;" /></td>
+                        <td><input class="j-input" @bind="p.Slug" style="margin:0;" /></td>
+                        <td><input type="checkbox" @bind="p.IsCorePractice" /></td>
+                        <td><button class="j-button j-small" @onclick="() => RemovePractice(p)">Remove</button></td>
+                    </tr>
+                }
+                @if (_firm.PracticeAreas.Count == 0)
+                {
+                    <tr><td colspan="4" class="j-text-grey">None yet.</td></tr>
+                }
+            </tbody>
+        </table>
+        <button class="j-button j-small" @onclick="AddPractice">+ Add practice area</button>
+
+        <h2 class="j-mt-8 j-mb-4">Perks</h2>
+        <table class="j-table" style="margin-bottom: 24px;">
+            <thead><tr><th>Category</th><th>Name</th><th>Description</th><th>Order</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var k in _firm.Perks.OrderBy(x => x.DisplayOrder))
+                {
+                    <tr>
+                        <td style="min-width:120px;"><input class="j-input" @bind="k.Category" style="margin:0;" /></td>
+                        <td style="min-width:160px;"><input class="j-input" @bind="k.Name" style="margin:0;" /></td>
+                        <td><input class="j-input" @bind="k.Description" style="margin:0;" /></td>
+                        <td style="width:80px;"><input class="j-input" type="number" @bind="k.DisplayOrder" style="margin:0;" /></td>
+                        <td><button class="j-button j-small" @onclick="() => RemovePerk(k)">Remove</button></td>
+                    </tr>
+                }
+                @if (_firm.Perks.Count == 0)
+                {
+                    <tr><td colspan="5" class="j-text-grey">None yet.</td></tr>
+                }
+            </tbody>
+        </table>
+        <button class="j-button j-small" @onclick="AddPerk">+ Add perk</button>
+
+        <h2 class="j-mt-8 j-mb-4">Deadlines</h2>
+        <table class="j-table" style="margin-bottom: 24px;">
+            <thead><tr><th>Type</th><th>Label</th><th>Deadline (UTC)</th><th>Apply URL</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var d in _firm.Deadlines.OrderBy(x => x.DeadlineUtc))
+                {
+                    <tr>
+                        <td>
+                            <select class="j-select" @bind="d.Type" style="margin:0;">
+                                @foreach (var t in Enum.GetValues<DeadlineType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </td>
+                        <td><input class="j-input" @bind="d.Label" style="margin:0;" /></td>
+                        <td><input class="j-input" type="datetime-local" value="@d.DeadlineUtc.ToString("yyyy-MM-ddTHH:mm")" @onchange="(e) => SetDeadline(d, e)" style="margin:0;" /></td>
+                        <td><input class="j-input" @bind="d.ApplyUrl" style="margin:0;" /></td>
+                        <td><button class="j-button j-small" @onclick="() => RemoveDeadline(d)">Remove</button></td>
+                    </tr>
+                }
+                @if (_firm.Deadlines.Count == 0)
+                {
+                    <tr><td colspan="5" class="j-text-grey">None yet.</td></tr>
+                }
+            </tbody>
+        </table>
+        <button class="j-button j-small" @onclick="AddDeadline">+ Add deadline</button>
+
+        <h2 class="j-mt-8 j-mb-4">Editorial &amp; Anonymous Reviews</h2>
+        @foreach (var r in _firm.Reviews.OrderByDescending(x => x.PublishedAtUtc))
+        {
+            <div style="border: 1px solid var(--juris-grey-2); padding: 16px; margin-bottom: 12px;">
+                <div class="j-form-row"><label>Title</label><input class="j-input" @bind="r.Title" /></div>
+                <div class="j-form-row"><label>Body</label><textarea class="j-textarea" @bind="r.Body"></textarea></div>
+                <div class="j-form-row"><label>Author alias</label><input class="j-input" @bind="r.AuthorAlias" /></div>
+                <div class="j-flex" style="gap:16px;">
+                    <label><input type="checkbox" @bind="r.IsAnonymous" /> Anonymous</label>
+                    <label><input type="checkbox" @bind="r.IsEditorial" /> Editorial</label>
+                    <button class="j-button j-small" @onclick="() => RemoveReview(r)">Remove</button>
+                </div>
+            </div>
+        }
+        @if (_firm.Reviews.Count == 0)
+        {
+            <p class="j-text-grey">No reviews yet.</p>
+        }
+        <button class="j-button j-small" @onclick="AddReview">+ Add review</button>
+
+        <div class="j-mt-8">
+            <button class="j-button j-primary j-large" @onclick="Save" disabled="@_busy">@(_busy ? "Saving…" : "Save all changes")</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid FirmId { get; set; }
+
+    private Juris.Domain.Entities.Firm? _firm;
+    private string? _message;
+    private bool _busy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _firm = await Db.Firms
+            .Include(f => f.PracticeAreas)
+            .Include(f => f.Perks)
+            .Include(f => f.Deadlines)
+            .Include(f => f.Reviews)
+            .FirstOrDefaultAsync(f => f.Id == FirmId);
+    }
+
+    private void AddPractice()
+    {
+        if (_firm is null) return;
+        _firm.PracticeAreas.Add(new Juris.Domain.Entities.FirmPracticeArea
+        {
+            FirmId = _firm.Id,
+            Name = "New practice area",
+            Slug = "new-practice-area-" + Guid.NewGuid().ToString("N").Substring(0, 6),
+        });
+    }
+    private void RemovePractice(Juris.Domain.Entities.FirmPracticeArea p)
+    {
+        _firm?.PracticeAreas.Remove(p);
+        Db.FirmPracticeAreas.Remove(p);
+    }
+
+    private void AddPerk()
+    {
+        if (_firm is null) return;
+        _firm.Perks.Add(new Juris.Domain.Entities.FirmPerk
+        {
+            FirmId = _firm.Id,
+            Category = "New",
+            Name = "New perk",
+            DisplayOrder = _firm.Perks.Count
+        });
+    }
+    private void RemovePerk(Juris.Domain.Entities.FirmPerk k)
+    {
+        _firm?.Perks.Remove(k);
+        Db.FirmPerks.Remove(k);
+    }
+
+    private void AddDeadline()
+    {
+        if (_firm is null) return;
+        _firm.Deadlines.Add(new Juris.Domain.Entities.FirmDeadline
+        {
+            FirmId = _firm.Id,
+            Type = DeadlineType.Articling,
+            Label = "New deadline",
+            DeadlineUtc = DateTime.UtcNow.AddDays(30),
+        });
+    }
+    private void RemoveDeadline(Juris.Domain.Entities.FirmDeadline d)
+    {
+        _firm?.Deadlines.Remove(d);
+        Db.FirmDeadlines.Remove(d);
+    }
+    private void SetDeadline(Juris.Domain.Entities.FirmDeadline d, ChangeEventArgs e)
+    {
+        if (e.Value is string s && DateTime.TryParse(s, out var dt))
+            d.DeadlineUtc = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+    }
+
+    private void AddReview()
+    {
+        if (_firm is null) return;
+        _firm.Reviews.Add(new Juris.Domain.Entities.FirmReview
+        {
+            FirmId = _firm.Id,
+            Title = "New review",
+            Body = "",
+            IsAnonymous = true,
+            PublishedAtUtc = DateTime.UtcNow
+        });
+    }
+    private void RemoveReview(Juris.Domain.Entities.FirmReview r)
+    {
+        _firm?.Reviews.Remove(r);
+        Db.FirmReviews.Remove(r);
+    }
+
+    private async Task Save()
+    {
+        if (_firm is null) return;
+        _busy = true;
+        try
+        {
+            await Db.SaveChangesAsync();
+            _message = "Saved.";
+        }
+        catch (Exception ex)
+        {
+            _message = "Error: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+}

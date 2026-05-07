@@ -1,0 +1,192 @@
+@page "/portal/analytics"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireFirmHR")]
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthState
+@inject Microsoft.AspNetCore.Identity.UserManager<Juris.Infrastructure.Identity.ApplicationUser> UserManager
+@inject IAnalyticsService Analytics
+
+<PageTitle>HR Dashboard · Juris Portal</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/portal" class="j-plain">← Portal</a></div>
+        <h1 style="font-size: clamp(28px, 4vw, 44px);">HR Dashboard</h1>
+        <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 14px;">Last 30 days · @_dashboard?.FirmName</p>
+    </div>
+</section>
+
+@if (_dashboard is null)
+{
+    <section class="j-section">
+        <div class="j-container">
+            <div class="j-empty">No firm linked or no data yet. Browse the public site to generate sample analytics, then return.</div>
+        </div>
+    </section>
+}
+else
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container">
+            <div class="j-eyebrow">Headline metrics</div>
+            <div class="j-stat-grid j-mt-4">
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Profile Views</div>
+                    <div class="j-stat-value">@_dashboard.ProfileViews</div>
+                    <div class="j-stat-sub">@_dashboard.UniqueSessions unique sessions</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Apply Clicks</div>
+                    <div class="j-stat-value">@_dashboard.ApplyClicks</div>
+                    <div class="j-stat-sub">@_dashboard.EarlyCareersClicks early-careers clicks</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Click-Through Rate</div>
+                    <div class="j-stat-value">@(((_dashboard.ApplyClickThroughRate * 100)).ToString("0.0"))%</div>
+                    <div class="j-stat-sub">apply + early-careers / views</div>
+                </div>
+                <div class="j-stat-cell">
+                    <div class="j-stat-label">Avg. Section Dwell</div>
+                    <div class="j-stat-value">@_dashboard.AverageDwellSeconds<small style="font-size: 14px;">s</small></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="j-section j-grey">
+        <div class="j-container">
+            <h2>Profile views — daily</h2>
+            <Sparkline Points="_dashboard.ProfileViewsByDay" />
+        </div>
+    </section>
+
+    <section class="j-section">
+        <div class="j-container">
+            <div class="j-stat-grid">
+                <div class="j-stat-cell">
+                    <h3>Top Universities</h3>
+                    <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 12px; margin-top: 4px;">Anonymized affiliation. The "Student Funnel."</p>
+                    @{
+                        var uniBars = _dashboard.TopUniversities
+                            .Select(u => new BarList.BarItem(u.University, u.Count, $"{u.Count}  ·  {u.Percent:0.#}%"))
+                            .ToList();
+                    }
+                    <BarList Items="uniBars" />
+                </div>
+
+                <div class="j-stat-cell">
+                    <h3>By year of study</h3>
+                    <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 12px; margin-top: 4px;">1L / 2L / 3L / Articling — who's looking.</p>
+                    @{
+                        var yearBars = _dashboard.ByYearOfStudy
+                            .Select(y => new BarList.BarItem(YearLabel(y.YearOfStudy), y.Count, $"{y.Count}  ·  {y.Percent:0.#}%"))
+                            .ToList();
+                    }
+                    <BarList Items="yearBars" />
+                </div>
+
+                <div class="j-stat-cell">
+                    <h3>The Vibe Heatmap</h3>
+                    <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 12px; margin-top: 4px;">Which perks get the most clicks.</p>
+                    @{
+                        var perkBars = _dashboard.TopPerkClicks
+                            .Select(p => new BarList.BarItem($"{p.PerkCategory}: {p.PerkName}", p.Clicks, p.Clicks.ToString()))
+                            .ToList();
+                    }
+                    <BarList Items="perkBars" />
+                </div>
+
+                <div class="j-stat-cell">
+                    <h3>Section dwell</h3>
+                    <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 12px; margin-top: 4px;">Average seconds spent on each section. Hard Data vs. Vibe.</p>
+                    @{
+                        var dwellBars = _dashboard.SectionDwell
+                            .Select(s => new BarList.BarItem(s.SectionKey, s.AvgDwellSeconds, $"{s.AvgDwellSeconds}s"))
+                            .ToList();
+                    }
+                    <BarList Items="dwellBars" />
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="j-section j-grey">
+        <div class="j-container">
+            <div class="j-stat-grid">
+                <div class="j-stat-cell">
+                    <h3>Peer Benchmark</h3>
+                    <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 12px; margin-top: 4px;">Profile views vs. average across <strong>@_dashboard.Peer.PeerGroup</strong>.</p>
+                    <div class="j-stat-grid" style="margin-top: 16px;">
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">You</div>
+                            <div class="j-stat-value">@_dashboard.Peer.FirmViews</div>
+                        </div>
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">Peer Avg</div>
+                            <div class="j-stat-value">@_dashboard.Peer.PeerAverageViews</div>
+                        </div>
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">Δ vs. peer</div>
+                            <div class="j-stat-value">@(_dashboard.Peer.DiffPercent >= 0 ? "+" : "")@_dashboard.Peer.DiffPercent.ToString("0.0")%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="j-stat-cell">
+                    <h3>Drop-off Analysis</h3>
+                    <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 12px; margin-top: 4px;">Where students leave the profile. "Recruitment leakage."</p>
+                    <div class="j-stat-grid" style="margin-top: 16px;">
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">After billable target</div>
+                            <div class="j-stat-value">@_dashboard.DropOff.ExitsAfterBillableTargetView</div>
+                        </div>
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">After hireback rate</div>
+                            <div class="j-stat-value">@_dashboard.DropOff.ExitsAfterRetentionView</div>
+                        </div>
+                        <div class="j-stat-cell">
+                            <div class="j-stat-label">All exits</div>
+                            <div class="j-stat-value">@_dashboard.DropOff.Total</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="j-stat-cell">
+                    <h3>Top search terms</h3>
+                    <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 12px; margin-top: 4px;">What students are searching site-wide. Use these to align your perk copy.</p>
+                    @{
+                        var termBars = _dashboard.RelevantSearchTerms
+                            .Select(t => new BarList.BarItem(t.Term, t.Count, t.Count.ToString()))
+                            .ToList();
+                    }
+                    <BarList Items="termBars" />
+                </div>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    private FirmAnalyticsDashboardDto? _dashboard;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        if (auth.User?.Identity?.IsAuthenticated != true) return;
+        var user = await UserManager.GetUserAsync(auth.User);
+        if (user?.FirmId is null) return;
+
+        var to = DateTime.UtcNow;
+        var from = to.AddDays(-30);
+        _dashboard = await Analytics.GetFirmDashboardAsync(user.FirmId.Value, from, to);
+    }
+
+    private static string YearLabel(YearOfStudy y) => y switch
+    {
+        YearOfStudy.PreLaw => "Pre-Law",
+        YearOfStudy.OneL => "1L",
+        YearOfStudy.TwoL => "2L",
+        YearOfStudy.ThreeL => "3L",
+        YearOfStudy.Articling => "Articling",
+        YearOfStudy.JuniorAssociate => "Junior Associate",
+        _ => y.ToString(),
+    };
+}

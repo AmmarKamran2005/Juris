@@ -1,0 +1,51 @@
+@inject NavigationManager Nav
+
+<HeadContent>
+    @if (!string.IsNullOrEmpty(Description))
+    {
+        <meta name="description" content="@Description" />
+    }
+    <meta property="og:type" content="@Type" />
+    <meta property="og:title" content="@(Title ?? "Juris — The Legal Intelligence Hub")" />
+    @if (!string.IsNullOrEmpty(Description))
+    {
+        <meta property="og:description" content="@Description" />
+    }
+    <meta property="og:url" content="@_canonical" />
+    <meta property="og:site_name" content="Juris" />
+    @if (!string.IsNullOrEmpty(ImageUrl))
+    {
+        <meta property="og:image" content="@_absImage" />
+        <meta name="twitter:card" content="summary_large_image" />
+    }
+    else
+    {
+        <meta name="twitter:card" content="summary" />
+    }
+    <meta name="twitter:title" content="@(Title ?? "Juris")" />
+    @if (!string.IsNullOrEmpty(Description))
+    {
+        <meta name="twitter:description" content="@Description" />
+    }
+    <link rel="canonical" href="@_canonical" />
+</HeadContent>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public string? ImageUrl { get; set; }
+    [Parameter] public string Type { get; set; } = "website";
+
+    private string _canonical = "";
+    private string _absImage = "";
+
+    protected override void OnInitialized()
+    {
+        _canonical = Nav.Uri;
+        if (!string.IsNullOrEmpty(ImageUrl))
+        {
+            _absImage = ImageUrl.StartsWith("http") ? ImageUrl
+                : new Uri(new Uri(Nav.BaseUri), ImageUrl).ToString();
+        }
+    }
+}

@@ -1,0 +1,245 @@
+@page "/firms/{Slug}"
+@inject IFirmService FirmService
+@inject NavigationManager Nav
+
+@if (_firm is null)
+{
+    <PageTitle>Firm not found · Juris</PageTitle>
+    <section class="j-section">
+        <div class="j-container">
+            <div class="j-eyebrow">404</div>
+            <h1>That firm isn't on our list yet.</h1>
+            <p class="j-lede">It may not have been added to the directory, or the URL is incorrect.</p>
+            <a href="/firms" class="j-button j-primary j-plain j-mt-6">← Back to directory</a>
+        </div>
+    </section>
+}
+else
+{
+    <PageTitle>@_firm.Name · Juris</PageTitle>
+    <SeoHead Title="@($"{_firm.Name} · Articling, Salary, Reviews · Juris")"
+             Description="@(_firm.VibeSummary ?? $"{_firm.Name} — articling salary, class size, hireback rate, and editorial profile in the Juris Firm Directory.")"
+             ImageUrl="@_firm.LogoUrl" />
+
+    <section style="border-bottom: 1px solid var(--juris-fg); padding: 32px 0;">
+        <div class="j-container">
+            <div class="j-flex" style="font-family: var(--juris-sans); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--juris-grey-4);">
+                <a href="/firms" class="j-plain">Firms</a>
+                <span>·</span>
+                <span>@_firm.City</span>
+                <span>·</span>
+                <span>@PeerLabel(_firm.PeerGroup)</span>
+            </div>
+            <div class="j-flex" style="margin-top: 16px;">
+                <div class="j-card-logo" style="width: 88px; height: 88px;">
+                    @if (!string.IsNullOrEmpty(_firm.LogoUrl))
+                    {
+                        <img src="@_firm.LogoUrl" alt="@_firm.Name logo"
+                             onerror="this.style.display='none';this.parentElement.textContent=this.alt.substring(0,1);" />
+                    }
+                    else
+                    {
+                        @_firm.Name.Substring(0, 1)
+                    }
+                </div>
+                <div style="flex:1;">
+                    <h1 style="font-size: clamp(34px, 5vw, 60px); margin-bottom: 6px;">@_firm.Name</h1>
+                    <div class="j-tags">
+                        @if (_firm.IsFeaturedPartner)
+                        {
+                            <span class="j-tag j-featured">Featured Partner</span>
+                        }
+                        @if (_firm.IsVerified)
+                        {
+                            <span class="j-tag j-verified">Verified Profile</span>
+                        }
+                        @foreach (var pa in _firm.PracticeAreas.Take(4))
+                        {
+                            <span class="j-tag">@pa</span>
+                        }
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(_firm.ApplyUrl))
+                {
+                    <a href="@_firm.ApplyUrl" target="_blank" rel="noopener" class="j-button j-primary j-plain j-large"
+                       data-track-click="ApplyButtonClick" data-firm-id="@_firm.Id">Apply →</a>
+                }
+            </div>
+        </div>
+    </section>
+
+    <div class="j-profile-grid">
+        <aside class="j-profile-sidebar" data-track-section="hard-data" data-firm-id="@_firm.Id">
+            <h3 style="margin-bottom: 24px; font-family: var(--juris-sans); font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;">Hard Data</h3>
+
+            <div class="j-stat-block">
+                <div class="j-stat-label">Articling Salary</div>
+                <div class="j-stat-value">@(_firm.ArticlingSalary.HasValue ? "$" + _firm.ArticlingSalary.Value.ToString("N0") : "—")</div>
+                @if (_firm.FirstYearAssociateSalary.HasValue)
+                {
+                    <div class="j-stat-sub">1st-yr associate · $@_firm.FirstYearAssociateSalary.Value.ToString("N0")</div>
+                }
+            </div>
+
+            <div class="j-stat-block" data-track-section="billable-target" data-firm-id="@_firm.Id">
+                <div class="j-stat-label">Billable Target</div>
+                <div class="j-stat-value">@(_firm.BillableTarget?.ToString("N0") ?? "—")</div>
+                <div class="j-stat-sub">hours / year</div>
+            </div>
+
+            <div class="j-stat-block">
+                <div class="j-stat-label">Class Size</div>
+                <div class="j-stat-value">@(_firm.ClassSize?.ToString() ?? "—")</div>
+                <div class="j-stat-sub">articling students</div>
+            </div>
+
+            <div class="j-stat-block" data-track-section="retention-rate" data-firm-id="@_firm.Id">
+                <div class="j-stat-label">Hireback Rate</div>
+                <div class="j-stat-value">@(_firm.RetentionRate.HasValue ? _firm.RetentionRate.Value.ToString("0") + "%" : "—")</div>
+                <div class="j-stat-sub">articling → 1st year</div>
+            </div>
+
+            @if (_firm.Deadlines.Count > 0)
+            {
+                <div class="j-stat-block">
+                    <div class="j-stat-label">Recruitment Deadlines</div>
+                    @foreach (var d in _firm.Deadlines)
+                    {
+                        <div style="margin-top: 12px; font-family: var(--juris-sans); font-size: 14px;">
+                            <div class="j-flex" style="justify-content: space-between; gap: 8px;">
+                                <strong>@d.Label</strong>
+                                <span class="j-status-pill @StatusClass(d.Status)">@d.Status</span>
+                            </div>
+                            <div class="j-text-grey" style="font-size: 12px; margin-top: 4px;">
+                                @d.DeadlineUtc.ToString("MMM d, yyyy · h:mm tt") UTC
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div style="margin-top: 24px; display: flex; gap: 8px; flex-direction: column;">
+                @if (!string.IsNullOrEmpty(_firm.EarlyCareersUrl))
+                {
+                    <a href="@_firm.EarlyCareersUrl" target="_blank" rel="noopener" class="j-button j-plain"
+                       data-track-click="EarlyCareersClick" data-firm-id="@_firm.Id">Early Careers ↗</a>
+                }
+                @if (!string.IsNullOrEmpty(_firm.WebsiteUrl))
+                {
+                    <a href="@_firm.WebsiteUrl" target="_blank" rel="noopener" class="j-button j-plain">Firm website ↗</a>
+                }
+            </div>
+        </aside>
+
+        <div class="j-profile-main" data-track-section="vibe" data-firm-id="@_firm.Id">
+            @if (!string.IsNullOrEmpty(_firm.VibeSummary))
+            {
+                <div class="j-eyebrow" style="font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--juris-grey-4); margin-bottom: 14px;">The Vibe</div>
+                <p class="j-lede" style="margin-bottom: 36px; max-width: 64ch;">@_firm.VibeSummary</p>
+            }
+
+            @if (!string.IsNullOrEmpty(_firm.AiPolicy))
+            {
+                <h2 data-track-section="ai-policy" data-firm-id="@_firm.Id">AI Policy</h2>
+                <p class="j-prose">@_firm.AiPolicy</p>
+            }
+
+            @if (!string.IsNullOrEmpty(_firm.WorkLifeBalance))
+            {
+                <h2 data-track-section="work-life" data-firm-id="@_firm.Id">Work-Life Balance</h2>
+                <p class="j-prose">@_firm.WorkLifeBalance</p>
+            }
+
+            @if (!string.IsNullOrEmpty(_firm.OfficeCulture))
+            {
+                <h2 data-track-section="culture" data-firm-id="@_firm.Id">Office Culture</h2>
+                <p class="j-prose">@_firm.OfficeCulture</p>
+            }
+
+            @if (!string.IsNullOrEmpty(_firm.CompensationPhilosophy))
+            {
+                <h2 data-track-section="compensation" data-firm-id="@_firm.Id">Compensation</h2>
+                <p class="j-prose">@_firm.CompensationPhilosophy</p>
+            }
+
+            @if (_firm.Perks.Count > 0)
+            {
+                <h2 data-track-section="perks" data-firm-id="@_firm.Id" class="j-mt-8">Perks &amp; Programs</h2>
+                <div class="j-stat-grid">
+                    @foreach (var p in _firm.Perks)
+                    {
+                        <div class="j-stat-cell" data-track-click="PerkClick" data-firm-id="@_firm.Id"
+                             data-track-meta="@($"{p.Category}|{p.Name}")" style="cursor:pointer;">
+                            <div class="j-stat-label">@p.Category</div>
+                            <div class="j-stat-value" style="font-size: 18px;">@p.Name</div>
+                            @if (!string.IsNullOrEmpty(p.Description))
+                            {
+                                <div class="j-stat-sub j-mt-2" style="font-family: var(--juris-serif); font-size: 14px;">@p.Description</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_firm.Reviews.Count > 0)
+            {
+                <h2 class="j-mt-8" data-track-section="reviews" data-firm-id="@_firm.Id">Editorial &amp; Anonymous Reviews</h2>
+                @foreach (var r in _firm.Reviews)
+                {
+                    <article style="border-top: 1px solid var(--juris-fg); padding: 24px 0;">
+                        <div class="j-flex j-mb-4" style="gap: 8px;">
+                            @if (r.IsEditorial)
+                            {
+                                <span class="j-tag j-verified">Editorial</span>
+                            }
+                            else
+                            {
+                                <span class="j-tag">@(r.IsAnonymous ? "Anonymous" : r.AuthorAlias ?? "Submission")</span>
+                            }
+                            <span class="j-text-grey" style="font-family: var(--juris-sans); font-size: 12px;">
+                                @r.PublishedAtUtc.ToString("MMM d, yyyy")
+                            </span>
+                        </div>
+                        <h3>@r.Title</h3>
+                        <p class="j-prose">@r.Body</p>
+                    </article>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [CascadingParameter] private HttpContext? HttpCtx { get; set; }
+
+    private FirmDetailDto? _firm;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _firm = await FirmService.GetBySlugAsync(Slug);
+        // Set 404 status for SEO when slug doesn't exist
+        if (_firm is null && HttpCtx is not null)
+        {
+            HttpCtx.Response.StatusCode = 404;
+        }
+    }
+
+    private static string StatusClass(DeadlineStatus s) => s switch
+    {
+        DeadlineStatus.Open => "j-open",
+        DeadlineStatus.ClosingSoon => "j-closing",
+        _ => "j-closed",
+    };
+    private static string PeerLabel(PeerGroup g) => g switch
+    {
+        PeerGroup.SevenSisters => "Seven Sisters",
+        PeerGroup.NationalFullService => "National Full-Service",
+        PeerGroup.Boutique => "Boutique",
+        PeerGroup.MidLaw => "Mid-Law",
+        PeerGroup.USFirmCanadianOffice => "US Firm · Canadian Office",
+        PeerGroup.Inhouse => "In-house",
+        PeerGroup.Government => "Government",
+        _ => g.ToString(),
+    };
+}

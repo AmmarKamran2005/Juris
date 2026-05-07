@@ -1,0 +1,172 @@
+@page "/admin/users"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireAdmin")]
+@rendermode InteractiveServer
+@inject Microsoft.AspNetCore.Identity.UserManager<Juris.Infrastructure.Identity.ApplicationUser> UserManager
+@inject Microsoft.AspNetCore.Identity.RoleManager<Microsoft.AspNetCore.Identity.IdentityRole> RoleManager
+@inject Juris.Application.Common.IApplicationDbContext Db
+@using Microsoft.EntityFrameworkCore
+@using Juris.Infrastructure.Identity
+
+<PageTitle>Manage Users · Admin · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/admin" class="j-plain">← Admin</a></div>
+        <h1 style="font-size: clamp(28px, 4vw, 44px);">Manage Users</h1>
+        <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 14px;">@_users.Count user accounts.</p>
+    </div>
+</section>
+
+<section class="j-section" style="padding-top: 24px;">
+    <div class="j-container">
+        @if (_message is not null)
+        {
+            <div class="j-alert j-alert-success">@_message</div>
+        }
+
+        <h2>Provision FirmHR account</h2>
+        <p class="j-text-grey" style="font-family: var(--juris-sans); font-size: 14px;">Creates a new login linked to a firm. Share the password with the contact.</p>
+        <EditForm Model="_newUser" OnValidSubmit="ProvisionFirmHR" FormName="provision-firmhr">
+            <div class="j-form-row"><label>Email</label><InputText class="j-input" @bind-Value="_newUser.Email" /></div>
+            <div class="j-form-row"><label>Display name</label><InputText class="j-input" @bind-Value="_newUser.DisplayName" /></div>
+            <div class="j-form-row"><label>Initial password (min 8 chars, mixed case + digit)</label><InputText class="j-input" @bind-Value="_newUser.Password" type="password" /></div>
+            <div class="j-form-row">
+                <label>Linked firm</label>
+                <InputSelect class="j-select" @bind-Value="_newUser.FirmId">
+                    <option value="">— select firm —</option>
+                    @foreach (var f in _firms)
+                    {
+                        <option value="@f.Id">@f.Name (@f.City)</option>
+                    }
+                </InputSelect>
+            </div>
+            <button type="submit" class="j-button j-primary" disabled="@_busy">@(_busy ? "Creating…" : "Provision user")</button>
+        </EditForm>
+    </div>
+</section>
+
+<section class="j-section j-grey">
+    <div class="j-container">
+        <h2>All users</h2>
+        <table class="j-table">
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Name</th>
+                    <th>Roles</th>
+                    <th>Linked firm</th>
+                    <th>Created</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in _users)
+                {
+                    var roles = _userRoles.GetValueOrDefault(u.Id, new List<string>());
+                    var firmName = u.FirmId.HasValue
+                        ? _firms.FirstOrDefault(f => f.Id == u.FirmId)?.Name ?? "(unknown)"
+                        : "—";
+                    <tr>
+                        <td><strong>@u.Email</strong></td>
+                        <td>@u.DisplayName</td>
+                        <td>
+                            @foreach (var r in roles)
+                            {
+                                <span class="j-tag j-verified" style="margin-right: 4px;">@r</span>
+                            }
+                        </td>
+                        <td>@firmName</td>
+                        <td style="font-family: var(--juris-sans); font-size: 12px;">@u.CreatedAtUtc.ToString("MMM d, yyyy")</td>
+                        <td><a href="/admin/users/@u.Id" class="j-button j-small j-plain">Edit</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@code {
+    private List<ApplicationUser> _users = new();
+    private List<Juris.Domain.Entities.Firm> _firms = new();
+    private Dictionary<string, List<string>> _userRoles = new();
+    private NewUserInput _newUser = new();
+    private string? _message;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _users = await UserManager.Users.OrderBy(u => u.Email).ToListAsync();
+        _firms = await Db.Firms.OrderBy(f => f.Name).AsNoTracking().ToListAsync();
+        _userRoles.Clear();
+        foreach (var u in _users)
+        {
+            var rs = await UserManager.GetRolesAsync(u);
+            _userRoles[u.Id] = rs.ToList();
+        }
+    }
+
+    private async Task ProvisionFirmHR()
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_newUser.Email) || string.IsNullOrWhiteSpace(_newUser.Password))
+            {
+                _message = "Email and password are required.";
+                return;
+            }
+
+            var user = new ApplicationUser
+            {
+                Email = _newUser.Email.Trim(),
+                UserName = _newUser.Email.Trim(),
+                EmailConfirmed = true,
+                DisplayName = _newUser.DisplayName,
+                FirmId = _newUser.FirmId,
+            };
+            var result = await UserManager.CreateAsync(user, _newUser.Password);
+            if (!result.Succeeded)
+            {
+                _message = "Failed: " + string.Join("; ", result.Errors.Select(e => e.Description));
+                return;
+            }
+
+            await UserManager.AddToRoleAsync(user, Roles.FirmHR);
+
+            // Auto-flag the firm as verified once an HR user is provisioned.
+            if (_newUser.FirmId.HasValue)
+            {
+                var firm = await Db.Firms.FirstOrDefaultAsync(f => f.Id == _newUser.FirmId);
+                if (firm is not null)
+                {
+                    firm.IsVerified = true;
+                    firm.OwnerUserId = user.Id;
+                    firm.UpdatedAtUtc = DateTime.UtcNow;
+                    await Db.SaveChangesAsync();
+                }
+            }
+
+            _message = $"Created {user.Email}. Share the password with them.";
+            _newUser = new NewUserInput();
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private class NewUserInput
+    {
+        public string? Email { get; set; }
+        public string? DisplayName { get; set; }
+        public string? Password { get; set; }
+        public Guid? FirmId { get; set; }
+    }
+}

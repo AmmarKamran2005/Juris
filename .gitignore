@@ -1,0 +1,69 @@
+## .NET / Visual Studio
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+.vs/
+.vscode/
+*.swp
+
+## Build outputs
+[Dd]ebug/
+[Rr]elease/
+[Xx]64/
+[Xx]86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+## EF Core
+*.db
+*.db-shm
+*.db-wal
+
+## Rider
+.idea/
+*.iml
+
+## ASP.NET secrets / runtime
+appsettings.Development.json.local
+secrets.json
+.env
+*.pfx
+*.pem
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+*.lock.json
+
+## Test & coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+## OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+## Local server logs (we wrote these during development)
+juris.log
+juris.err.log
+
+## IDE / Tooling
+.history/
+.ionide/
+
+## Keep useful Blazor/.NET project files explicitly
+!.gitignore
+!.gitattributes

@@ -1,0 +1,268 @@
+@page "/admin/articles"
+@page "/admin/articles/new"
+@page "/admin/articles/{Id:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "RequireAdmin")]
+@rendermode InteractiveServer
+@implements IDisposable
+@inject Juris.Application.Common.IApplicationDbContext Db
+@inject NavigationManager Nav
+@inject IJSRuntime Js
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>@(_editing is null ? "Articles" : "Edit article") · Admin · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 48px 0 32px;">
+    <div class="j-container">
+        <div class="j-eyebrow"><a href="/admin" class="j-plain">← Admin</a></div>
+        <h1 style="font-size: clamp(28px, 4vw, 44px);">
+            @(_editing is null ? "Articles" : (_editing.Id == Guid.Empty ? "New article" : "Edit article"))
+        </h1>
+    </div>
+</section>
+
+@if (_editing is null && (Id.HasValue || _isNew))
+{
+    <section class="j-section">
+        <div class="j-container"><div class="j-empty">Loading…</div></div>
+    </section>
+}
+else if (_editing is not null)
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container j-narrow">
+            @if (_message is not null)
+            {
+                <div class="j-alert j-alert-success">@_message</div>
+            }
+
+            <EditForm Model="_editing" OnValidSubmit="Save" FormName="article-edit">
+                <div class="j-form-row"><label>Title</label><InputText class="j-input" @bind-Value="_editing.Title" /></div>
+                <div class="j-form-row">
+                    <label>Slug @(string.IsNullOrEmpty(_editing.Slug) ? "(empty — click Auto)" : "")</label>
+                    <div style="display:flex; gap:8px;">
+                        <InputText class="j-input" @bind-Value="_editing.Slug" />
+                        <button type="button" class="j-button j-small j-plain" @onclick="AutoSlug">Auto</button>
+                    </div>
+                </div>
+                <div class="j-form-row"><label>Subtitle</label><InputText class="j-input" @bind-Value="_editing.Subtitle" /></div>
+                <div class="j-form-row"><label>Excerpt</label><InputTextArea class="j-textarea" @bind-Value="_editing.Excerpt" /></div>
+                <div class="j-form-row">
+                    <label>Category</label>
+                    <InputSelect class="j-select" @bind-Value="_editing.Category">
+                        @foreach (var c in Enum.GetValues<ArticleCategory>())
+                        {
+                            <option value="@c">@c</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="j-form-row"><label>Author name</label><InputText class="j-input" @bind-Value="_editing.AuthorName" /></div>
+                <div class="j-form-row"><label>Read time (minutes)</label><InputNumber class="j-input" @bind-Value="_editing.ReadTimeMinutes" /></div>
+                <div class="j-form-row"><label>Featured image URL (optional)</label><InputText class="j-input" @bind-Value="_editing.FeaturedImageUrl" /></div>
+                <div class="j-form-row">
+                    <label>Body (HTML)</label>
+                    <InputTextArea class="j-textarea" @bind-Value="_editing.BodyHtml" style="min-height: 320px; font-family: var(--juris-sans); font-size: 13px;" />
+                </div>
+                <div class="j-form-row">
+                    <label style="font-family: var(--juris-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; display: flex; align-items: center; gap: 8px;">
+                        <InputCheckbox @bind-Value="_editing.IsPublished" /> Published
+                    </label>
+                </div>
+                <div class="j-form-row">
+                    <label style="font-family: var(--juris-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; display: flex; align-items: center; gap: 8px;">
+                        <InputCheckbox @bind-Value="_editing.IsFeatured" /> Featured
+                    </label>
+                </div>
+
+                <div class="j-mt-8" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                    <button type="submit" class="j-button j-primary" disabled="@_busy">@(_busy ? "Saving…" : "Save")</button>
+                    <a href="/admin/articles" class="j-button j-plain">Cancel</a>
+                    @if (_editing.Id != Guid.Empty)
+                    {
+                        <a href="/news/@_editing.Slug" target="_blank" rel="noopener" class="j-button j-plain">Preview ↗</a>
+                        <span style="flex: 1;"></span>
+                        <button type="button" class="j-button" @onclick="Delete" disabled="@_busy" style="border-color: var(--juris-fg);">Delete</button>
+                    }
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+else
+{
+    <section class="j-section" style="padding-top: 24px;">
+        <div class="j-container">
+            <div class="j-flex-between j-mb-6">
+                <span class="j-text-grey" style="font-family: var(--juris-sans); font-size: 13px;">@_articles.Count articles total.</span>
+                <a href="/admin/articles/new" class="j-button j-primary">+ New article</a>
+            </div>
+            @if (_articles.Count == 0)
+            {
+                <div class="j-empty">No articles yet. Click "+ New article" to draft your first piece.</div>
+            }
+            else
+            {
+                <table class="j-table">
+                    <thead>
+                        <tr><th>Title</th><th>Category</th><th>Author</th><th>Published</th><th>Status</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in _articles)
+                        {
+                            <tr>
+                                <td><strong>@a.Title</strong></td>
+                                <td>@a.Category</td>
+                                <td>@a.AuthorName</td>
+                                <td style="font-family: var(--juris-sans); font-size: 12px;">@a.PublishedAtUtc.ToString("MMM d, yyyy")</td>
+                                <td>
+                                    @if (a.IsFeatured)
+                                    {
+                                        <span class="j-tag j-featured">Featured</span>
+                                    }
+                                    @if (!a.IsPublished)
+                                    {
+                                        <span class="j-tag">Draft</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="j-tag j-verified">Live</span>
+                                    }
+                                </td>
+                                <td>
+                                    <a href="/admin/articles/@a.Id" class="j-button j-small j-plain">Edit</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    private bool _isNew;
+    private List<Juris.Domain.Entities.Article> _articles = new();
+    private Juris.Domain.Entities.Article? _editing;
+    private string? _message;
+    private bool _busy;
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        // Reset state so navigation between routes doesn't keep stale form data
+        _editing = null;
+        _message = null;
+
+        // Detect "new" route by URL — /admin/articles/new doesn't carry Id.
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/');
+        _isNew = path.EndsWith("/admin/articles/new", StringComparison.OrdinalIgnoreCase);
+
+        if (_isNew)
+        {
+            _editing = new Juris.Domain.Entities.Article
+            {
+                Id = Guid.Empty,
+                Slug = "",
+                Title = "",
+                BodyHtml = "<p></p>",
+                AuthorName = "Juris Editorial",
+                Category = ArticleCategory.Careers,
+                IsPublished = false,
+                ReadTimeMinutes = 4,
+                PublishedAtUtc = DateTime.UtcNow,
+            };
+            return;
+        }
+
+        if (Id.HasValue)
+        {
+            _editing = await Db.Articles.FirstOrDefaultAsync(x => x.Id == Id.Value);
+            if (_editing is null)
+            {
+                Nav.NavigateTo("/admin/articles");
+                return;
+            }
+            return;
+        }
+
+        _editing = null;
+        _articles = await Db.Articles.OrderByDescending(a => a.PublishedAtUtc).AsNoTracking().ToListAsync();
+    }
+
+    private void AutoSlug()
+    {
+        if (_editing is null) return;
+        if (!string.IsNullOrWhiteSpace(_editing.Title))
+            _editing.Slug = Juris.Application.Common.Slug.From(_editing.Title);
+    }
+
+    private async Task Save()
+    {
+        if (_editing is null) return;
+        _busy = true;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_editing.Slug) && !string.IsNullOrWhiteSpace(_editing.Title))
+                _editing.Slug = Juris.Application.Common.Slug.From(_editing.Title);
+
+            if (_editing.Id == Guid.Empty)
+            {
+                _editing.Id = Guid.NewGuid();
+                Db.Articles.Add(_editing);
+            }
+            _editing.UpdatedAtUtc = DateTime.UtcNow;
+            await Db.SaveChangesAsync();
+            _message = "Saved.";
+            Nav.NavigateTo($"/admin/articles/{_editing.Id}");
+        }
+        catch (Exception ex)
+        {
+            _message = "Error: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task Delete()
+    {
+        if (_editing is null || _editing.Id == Guid.Empty) return;
+        var ok = await Js.InvokeAsync<bool>("confirm",
+            $"Delete \"{_editing.Title}\"? This cannot be undone.");
+        if (!ok) return;
+
+        _busy = true;
+        try
+        {
+            // Preserve analytics aggregate value — null out the FK before delete.
+            var articleId = _editing.Id;
+            var events = await Db.AnalyticsEvents.Where(e => e.ArticleId == articleId).ToListAsync();
+            foreach (var ev in events) ev.ArticleId = null;
+            Db.Articles.Remove(_editing);
+            await Db.SaveChangesAsync();
+            Nav.NavigateTo("/admin/articles");
+        }
+        catch (Exception ex)
+        {
+            _message = "Delete failed: " + ex.Message;
+            _busy = false;
+        }
+    }
+}

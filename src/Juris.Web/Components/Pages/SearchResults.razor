@@ -1,0 +1,116 @@
+@page "/search"
+@inject ISearchService Search
+@inject IAnalyticsService Analytics
+@inject NavigationManager Nav
+
+<PageTitle>Search · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 56px 0 40px;">
+    <div class="j-container">
+        <div class="j-eyebrow">Search</div>
+        <h1 style="font-size: clamp(32px, 5vw, 56px);">@(string.IsNullOrWhiteSpace(_q) ? "What are you looking for?" : $"Results for \"{_q}\"")</h1>
+        <form class="j-search" method="get" action="/search" role="search">
+            <input type="search" name="q" value="@_q" placeholder="Search firms, schools, or salaries…" autocomplete="off" />
+            <button type="submit">Search</button>
+        </form>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(_q) && _response is not null)
+{
+    var totalCount = _response.Firms.Count + _response.Schools.Count + _response.Articles.Count;
+    @if (totalCount == 0)
+    {
+        <section class="j-section">
+            <div class="j-container">
+                <div class="j-empty">
+                    No results for "<strong>@_q</strong>". Try a firm name, city, or practice area.
+                </div>
+            </div>
+        </section>
+    }
+    else
+    {
+        @if (_response.Firms.Count > 0)
+        {
+            <section class="j-section">
+                <div class="j-container">
+                    <div class="j-section-head">
+                        <h2 style="margin:0;">Firms · @_response.Firms.Count</h2>
+                        <a href="/firms?q=@_q" class="j-button j-plain j-small">All firm matches →</a>
+                    </div>
+                    <ul style="list-style:none;padding:0;margin:0;border-top:1px solid var(--juris-fg);">
+                        @foreach (var r in _response.Firms)
+                        {
+                            <li style="border-bottom:1px solid var(--juris-grey-2);padding:18px 0;">
+                                <a href="@r.Url" class="j-plain"><strong>@r.Title</strong></a>
+                                <div class="j-text-grey" style="font-family: var(--juris-sans); font-size: 13px;">@r.Subtitle</div>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </section>
+        }
+
+        @if (_response.Schools.Count > 0)
+        {
+            <section class="j-section j-grey">
+                <div class="j-container">
+                    <h2>Law Schools · @_response.Schools.Count</h2>
+                    <ul style="list-style:none;padding:0;margin:0;border-top:1px solid var(--juris-fg);">
+                        @foreach (var r in _response.Schools)
+                        {
+                            <li style="border-bottom:1px solid var(--juris-grey-2);padding:18px 0;">
+                                <a href="@r.Url" class="j-plain"><strong>@r.Title</strong></a>
+                                <div class="j-text-grey" style="font-family: var(--juris-sans); font-size: 13px;">@r.Subtitle</div>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </section>
+        }
+
+        @if (_response.Articles.Count > 0)
+        {
+            <section class="j-section">
+                <div class="j-container">
+                    <h2>News &amp; Insights · @_response.Articles.Count</h2>
+                    <ul style="list-style:none;padding:0;margin:0;border-top:1px solid var(--juris-fg);">
+                        @foreach (var r in _response.Articles)
+                        {
+                            <li style="border-bottom:1px solid var(--juris-grey-2);padding:18px 0;">
+                                <a href="@r.Url" class="j-plain"><strong>@r.Title</strong></a>
+                                @if (!string.IsNullOrEmpty(r.Subtitle))
+                                {
+                                    <div class="j-text-grey" style="font-family: var(--juris-sans); font-size: 13px;">@r.Subtitle</div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </section>
+        }
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")] public string? _q { get; set; }
+    private SearchResponseDto? _response;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_q))
+        {
+            _response = null;
+            return;
+        }
+
+        _response = await Search.SearchAsync(_q, perCategoryLimit: 10);
+
+        // Server-side track of search query
+        await Analytics.TrackAsync(new AnalyticsEventInput(
+            Type: AnalyticsEventType.SearchQuery,
+            SearchTerm: _q,
+            Path: "/search"));
+    }
+}

@@ -1,0 +1,51 @@
+@page "/news"
+@inject IArticleService ArticleService
+
+<PageTitle>News &amp; Insights · Juris</PageTitle>
+
+<section class="j-hero" style="padding: 56px 0 40px;">
+    <div class="j-container">
+        <div class="j-eyebrow">News &amp; Insights</div>
+        <h1 style="font-size: clamp(34px, 5vw, 60px);">The "Legal Cheek" of Canada.</h1>
+        <p class="j-lede">Career intelligence, market news, student life, and "The Vault" — anonymous voices from inside the recruit.</p>
+
+        <div style="display: flex; gap: 8px; margin-top: 32px; flex-wrap: wrap;">
+            <a href="/news" class="j-button @(string.IsNullOrEmpty(_categoryRaw) ? "j-primary" : "")">All</a>
+            <a href="/news?category=Careers" class="j-button @(_categoryRaw == "Careers" ? "j-primary" : "")">Careers</a>
+            <a href="/news?category=MarketNews" class="j-button @(_categoryRaw == "MarketNews" ? "j-primary" : "")">Market News</a>
+            <a href="/news?category=StudentLife" class="j-button @(_categoryRaw == "StudentLife" ? "j-primary" : "")">Student Life</a>
+            <a href="/news?category=TheVault" class="j-button @(_categoryRaw == "TheVault" ? "j-primary" : "")">The Vault</a>
+        </div>
+    </div>
+</section>
+
+<section class="j-section" style="padding-top: 24px;">
+    <div class="j-container">
+        @if (_articles.Count == 0)
+        {
+            <div class="j-empty">No articles in this category yet.</div>
+        }
+        else
+        {
+            <div class="j-grid">
+                @foreach (var a in _articles)
+                {
+                    <ArticleCard Article="a" />
+                }
+            </div>
+        }
+    </div>
+</section>
+
+<NewsletterPanel HeadlineOverride="The next Vault piece, in your inbox." Source="news" />
+
+@code {
+    [SupplyParameterFromQuery(Name = "category")] public string? _categoryRaw { get; set; }
+    private IReadOnlyList<ArticleListItemDto> _articles = Array.Empty<ArticleListItemDto>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ArticleCategory? cat = Enum.TryParse<ArticleCategory>(_categoryRaw, true, out var c) ? c : null;
+        _articles = await ArticleService.ListAsync(cat, page: 1, pageSize: 50);
+    }
+}
