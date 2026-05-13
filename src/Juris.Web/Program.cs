@@ -111,13 +111,13 @@ public class Program
 
         app.UseStatusCodePagesWithReExecute("/404");
 
-        // Only enforce HTTPS redirection in non-Development environments.
-        // Locally we run on plain http://localhost so this avoids the
-        // "Failed to determine the https port for redirect" warning.
-        if (!app.Environment.IsDevelopment())
-        {
-            app.UseHttpsRedirection();
-        }
+        // No app-level HTTPS redirect: Render / nginx / any reverse proxy
+        // terminates TLS at the edge and forwards HTTP to the container.
+        // ForwardedHeaders (above) reads X-Forwarded-Proto so the app still
+        // sees `https` for URL generation (sitemap, OG canonical, etc).
+        // Enabling HttpsRedirection here would just cause confusing
+        // "Failed to determine the https port for redirect" warnings.
+
         app.UseStaticFiles();
         app.UseRateLimiter();
         app.UseAntiforgery();
