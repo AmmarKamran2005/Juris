@@ -180,23 +180,20 @@ Subsequent starts are idempotent — seed data only runs if tables are empty.
 4. Reverse-proxy via nginx/Apache to `localhost:5099`. Terminate TLS at the proxy.
 
 ### Docker
-```dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-WORKDIR /app
-EXPOSE 8080
-ENV ASPNETCORE_URLS=http://+:8080
+The repo ships with a production-ready multi-stage `Dockerfile` at the root —
+just `docker build -t juris .` and `docker run -p 8080:8080 -e ConnectionStrings__DefaultConnection="..." juris`.
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
-COPY . .
-RUN dotnet restore Juris.sln
-RUN dotnet publish src/Juris.Web -c Release -o /app/publish
+### Render (Postgres + free tier)
+The repo ships with `render.yaml` blueprint — push to GitHub, then on Render:
+1. **Dashboard → New → Blueprint** → connect this repo
+2. Render reads `render.yaml`, provisions:
+   - Postgres free tier (90-day free, then $7/mo)
+   - Web service (Docker, free tier — sleeps after 15min idle)
+   - Connection string auto-injected; admin password auto-generated
+3. First deploy takes ~5min (Docker build + EF schema create + seed)
+4. Get admin password from Render dashboard → **Environment** → `JurisAdmin__Password`
 
-FROM base AS final
-WORKDIR /app
-COPY --from=build /app/publish .
-ENTRYPOINT ["dotnet", "Juris.Web.dll"]
-```
+**App auto-detects provider** — if connection string is a `postgres://…` URL it switches to Npgsql; otherwise SQL Server. So the same codebase runs on Windows + SQL Server locally AND on Render with managed Postgres without any code changes.
 
 ### Production checklist
 - [ ] `JurisAdmin:Password` rotated and removed from `appsettings.json` (set via env var instead)

@@ -1,3 +1,4 @@
+using Juris.Infrastructure;
 using Juris.Infrastructure.Identity;
 using Juris.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -6,19 +7,30 @@ using Microsoft.EntityFrameworkCore;
 namespace Juris.Web.Infrastructure;
 
 /// <summary>
-/// Runs at startup: applies pending EF migrations, ensures the three
-/// platform roles exist, ensures a default admin user exists, and
-/// seeds placeholder firm/school/article data so the demo lights up.
+/// Runs at startup: applies pending EF migrations (SQL Server) OR ensures schema
+/// is created (Postgres — for the Render demo), seeds the three platform roles,
+/// the default admin user, and the placeholder firm/school/article data.
 /// </summary>
 public static class DatabaseInitializer
 {
     public static async Task InitializeAsync(IServiceProvider services)
     {
         var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseInitializer");
-
         var db = services.GetRequiredService<ApplicationDbContext>();
-        await db.Database.MigrateAsync();
-        logger.LogInformation("Migrations applied.");
+        var provider = services.GetRequiredService<DbProviderInfo>().Provider;
+
+        if (provider == DbProvider.Postgres)
+        {
+            // Migrations were authored against SQL Server, so on Postgres we
+            // bootstrap the schema directly from the model. Idempotent.
+            await db.Database.EnsureCreatedAsync();
+            logger.LogInformation("Postgres schema ensured.");
+        }
+        else
+        {
+            await db.Database.MigrateAsync();
+            logger.LogInformation("SQL Server migrations applied.");
+        }
 
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         foreach (var role in Roles.All)

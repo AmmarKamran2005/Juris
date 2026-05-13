@@ -29,7 +29,8 @@ public class AnalyticsEventConfiguration : IEntityTypeConfiguration<AnalyticsEve
         b.Property(x => x.Referrer).HasMaxLength(500);
         b.Property(x => x.UserAgent).HasMaxLength(500);
         b.Property(x => x.IpHash).HasMaxLength(80);
-        b.Property(x => x.MetadataJson).HasColumnType("nvarchar(max)");
+        // Provider-agnostic — EF picks nvarchar(max) on SQL Server, text on Postgres.
+        b.Property(x => x.MetadataJson);
 
         b.HasOne(x => x.Firm).WithMany().HasForeignKey(x => x.FirmId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne(x => x.School).WithMany().HasForeignKey(x => x.SchoolId).OnDelete(DeleteBehavior.SetNull);

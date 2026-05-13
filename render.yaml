@@ -1,0 +1,39 @@
+# =============================================================
+# Juris — Render Blueprint
+# https://render.com/docs/blueprint-spec
+# Deploys a Dockerized ASP.NET Core web service + managed Postgres
+# =============================================================
+
+databases:
+  - name: juris-db
+    plan: free                  # 90-day free Postgres (then $7/mo)
+    databaseName: juris
+    user: juris
+    region: oregon              # free tier region
+
+services:
+  - type: web
+    name: juris
+    runtime: docker
+    plan: free                  # 512 MB RAM, sleeps after 15min idle
+    region: oregon
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: ConnectionStrings__DefaultConnection
+        fromDatabase:
+          name: juris-db
+          property: connectionString
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_FORWARDEDHEADERS_ENABLED
+        value: "true"
+      # Admin credentials — auto-generated on first deploy.
+      # IMPORTANT: rotate via Render dashboard after first login.
+      - key: JurisAdmin__Email
+        value: admin@juris.local
+      - key: JurisAdmin__Password
+        generateValue: true     # Render generates a strong password automatically
+      - key: JurisAdmin__DisplayName
+        value: Juris Admin

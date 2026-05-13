@@ -18,7 +18,8 @@ public class ArticleConfiguration : IEntityTypeConfiguration<Article>
         b.Property(x => x.Title).HasMaxLength(250).IsRequired();
         b.Property(x => x.Subtitle).HasMaxLength(400);
         b.Property(x => x.Excerpt).HasMaxLength(800);
-        b.Property(x => x.BodyHtml).HasColumnType("nvarchar(max)").IsRequired();
+        // Use unlimited text for both SQL Server (nvarchar(max)) and Postgres (text).
+        b.Property(x => x.BodyHtml).IsRequired();
         b.Property(x => x.FeaturedImageUrl).HasMaxLength(500);
         b.Property(x => x.AuthorName).HasMaxLength(120).IsRequired();
         b.Property(x => x.AuthorUserId).HasMaxLength(450);

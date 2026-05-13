@@ -7,6 +7,7 @@ using Juris.Web.Components;
 using Juris.Web.Components.Account;
 using Juris.Web.Infrastructure;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -80,7 +81,22 @@ public class Program
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         });
 
+        // Trust X-Forwarded-* headers from reverse proxy (Render, nginx, etc.)
+        // so that scheme/host detection (e.g. for sitemap.xml + cookies) works
+        // correctly behind a TLS-terminating edge.
+        builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders =
+                ForwardedHeaders.XForwardedFor |
+                ForwardedHeaders.XForwardedProto |
+                ForwardedHeaders.XForwardedHost;
+            options.KnownNetworks.Clear();
+            options.KnownProxies.Clear();
+        });
+
         var app = builder.Build();
+
+        app.UseForwardedHeaders();
 
         if (app.Environment.IsDevelopment())
         {
